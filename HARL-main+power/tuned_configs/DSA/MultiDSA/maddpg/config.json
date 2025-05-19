@@ -1,0 +1,68 @@
+{
+    "algo_args":	{
+        "algo":	{
+            "batch_size":	2000,
+            "buffer_size":	10000,
+            "expl_noise":	0.1,
+            "fixed_order":	true,
+            "gamma":	0.99,
+            "n_step":	1,
+            "polyak":	0.005,
+            "share_param":	false,
+            "epsilon": 0.1
+        },
+        "device":	{
+            "cuda":	true,
+            "cuda_deterministic":	true,
+            "torch_threads":	4
+        },
+        "eval":	{
+            "eval_episodes":	10,
+            "n_eval_rollout_threads":	10,
+            "use_eval":	true
+        },
+        "logger":	{
+            "log_dir":	"./results"
+        },
+        "model":	{
+            "activation_func":	"relu",
+            "critic_lr":	0.001,
+            "final_activation_func":	"tanh",
+            "hidden_sizes":	[
+                128,
+                128
+            ],
+            "lr":	0.0005
+        },
+        "render":	{
+            "render_episodes":	10,
+            "use_render":	false
+        },
+        "seed":	{
+            "seed":	1,
+            "seed_specify":	true
+        },
+        "train":	{
+            "eval_interval":	100,
+            "log_interval":	null,
+            "model_dir":	null,
+            "n_rollout_threads":	10,
+            "num_env_steps":	500000,
+            "train_interval":	50,
+            "update_per_train":	1,
+            "use_linear_lr_decay":	false,
+            "use_proper_time_limits":	true,
+            "warmup_steps":	1000
+        }
+    },
+    "env_args":	{
+        "continuous_actions":	false,
+        "scenario":	"MultiDSA"
+    },
+    "main_args":	{
+        "algo":	"maddpg",
+        "env":	"DSA",
+        "exp_name":	"report",
+        "load_config":	""
+    }
+}
