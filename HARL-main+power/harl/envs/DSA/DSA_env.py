@@ -38,7 +38,7 @@ class DSA_Markov():
         self.Noise = 1 * np.float_power(10, -8)
         self.fc = 5
         self.K = 5
-        self.SU_power = [5, 10, 20, 30]
+        self.SU_power = [0, 10, 20, 30]
         self.PU_power = 40
 
         self.render_SINR()
@@ -246,7 +246,7 @@ class DSA_Markov():
                 x_f = sum(self.H2[k, ch] * self.SU_power[action[k][1]] for ch in cb)
                 y_f = sum(self.Interferecne_PU[k, ch] for ch in cb)
                 SINR = x_f / (Interferecne_SU + y_f + self.Noise * Dk[k])
-                base_reward = Dk[k] * np.log2(1 + SINR)
+                base_reward = Dk[k] * np.log2(1 + SINR)-self.SU_power[action[k][1]]/10
 
                 aloha_collisions = 0
                 if aloha_ratio >= 0:

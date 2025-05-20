@@ -117,9 +117,8 @@ class SoftTwinContinuousQCritic(TwinContinuousQCritic):
                 num_classes=4
             )  # shape: (n_agents, batch_size, 4)
             # 拼接并处理无效功率动作（信道动作为25时功率无效）
-            # mask = (actions_dict["channel"] != 25).unsqueeze(-1)  # shape: (n_agents, batch_size, 1)
-            mask = (check(actions_dict["channel"]).to(**self.tpdv_a) != 25).unsqueeze(-1).float()
-            power_onehot = power_onehot * mask.float()
+            # mask = (check(actions_dict["channel"]).to(**self.tpdv_a) != 25).unsqueeze(-1).float()
+            # power_onehot = power_onehot * mask.float()
             processed_actions = torch.cat([channel_onehot, power_onehot], dim=-1)  # shape: (n_agents, batch_size, 30)
             # processed_actions是已执行的动作
             # 展平以适应Critic输入（假设Critic已适配30维动作输入）
@@ -156,9 +155,10 @@ class SoftTwinContinuousQCritic(TwinContinuousQCritic):
                 channel_onehot = F.one_hot(channel, num_classes=26)
                 power_onehot = F.one_hot(power, num_classes=4)
                 # 屏蔽 channel=25 时的 power
-                mask = (channel != 25).unsqueeze(-1).float()
-                power_onehot = power_onehot * mask
+                # mask = (channel != 25).unsqueeze(-1).float()
+                # power_onehot = power_onehot * mask
                 full_action = torch.cat([channel_onehot, power_onehot], dim=-1)
+                full_action = full_action.squeeze(1)
                 processed_next_actions.append(full_action)
             next_actions = torch.stack(processed_next_actions, dim=0).to(**self.tpdv_a)
             n_agents, batch_size, act_dim = next_actions.shape
@@ -179,7 +179,7 @@ class SoftTwinContinuousQCritic(TwinContinuousQCritic):
             next_logp_actions_list = next_logp_actions
             logp_cat = torch.cat([logp.unsqueeze(-1) for logp in next_logp_actions_list], dim=1)  # → (batch_size, n_agents)
             joint_logp = logp_cat.sum(dim=1, keepdim=True)  # → (batch_size, 1)
-            next_logp_actions = joint_logp
+            next_logp_actions = joint_logp.squeeze(-1)
 
         next_q_values1 = self.target_critic(next_share_obs, next_actions)
         next_q_values2 = self.target_critic2(next_share_obs, next_actions)

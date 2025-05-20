@@ -7,6 +7,7 @@ from harl.utils.discrete_util import gumbel_softmax
 from harl.utils.envs_tools import check
 from harl.algorithms.actors.off_policy_base import OffPolicyBase
 from torch.distributions import Categorical
+from harl.models.base.distributions import FixedCategorical
 
 class HASAC(OffPolicyBase):
     def __init__(self, args, obs_space, act_space, device=torch.device("cpu")):
@@ -64,19 +65,34 @@ class HASAC(OffPolicyBase):
         if self.action_type == "Dict":
             logits_dict = self.actor.get_logits(obs, available_actions)
             # 选择动作（采样 or argmax）
-            if stochastic:
+            '''if stochastic:
                 channel_action = Categorical(logits=logits_dict["channel"]).sample()
-                power_action = Categorical(logits=logits_dict["power"]).sample()
+                power_action = Categorical(logits=logits_dict["power"]).sample()'''
+            if stochastic:
+                channel_action = FixedCategorical(logits=logits_dict["channel"]).sample()
+                power_action = FixedCategorical(logits=logits_dict["power"]).sample()
             else:
                 channel_action = logits_dict["channel"].argmax(dim=-1)
                 power_action = logits_dict["power"].argmax(dim=-1)
             # 获取选中动作对应的得分（logit）
-            channel_logit = logits_dict["channel"].gather(-1, channel_action.unsqueeze(-1)).squeeze(-1)
-            power_logit = logits_dict["power"].gather(-1, power_action.unsqueeze(-1)).squeeze(-1)
+            channel_logit = logits_dict["channel"].gather(-1, channel_action)  # .squeeze(-1)
+            power_logit = logits_dict["power"].gather(-1, power_action)  # .squeeze(-1)
+            #channel_logp = FixedCategorical(logits=logits_dict["channel"]).log_prob(channel_action)
+            #power_logp = FixedCategorical(logits=logits_dict["power"]).log_prob(power_action)
             # 掩码无效的功率动作
-            mask = (channel_action < self.act_space["channel"].n - 1).float()
-            power_logit = power_logit * mask
-
+            no_channel_mask = (channel_action == self.act_space["channel"].n - 1)  # shape: [batch, 1]
+            # 强制功率动作为 0
+            power_action = torch.where(
+                no_channel_mask,
+                torch.zeros_like(power_action),
+                power_action
+            )
+            # 强制功率 logit 为 0
+            power_logit = torch.where(
+                no_channel_mask,
+                torch.zeros_like(power_logit),
+                power_logit
+            )
             return {"channel": channel_action, "power": power_action}, channel_logit + power_logit
 
         else:

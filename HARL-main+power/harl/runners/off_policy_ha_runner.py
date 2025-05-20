@@ -70,7 +70,7 @@ class OffPolicyHARunner(OffPolicyBaseRunner):
                 sp_gamma,
                 self.value_normalizer,
             )
-            #return critic_loss
+            # return critic_loss
 
         else:
             next_actions = []
@@ -134,8 +134,8 @@ class OffPolicyHARunner(OffPolicyBaseRunner):
                             channel_onehot = F.one_hot(channel, num_classes=26)  # -> (batch_size, 26)
                             power_onehot = F.one_hot(power, num_classes=4)  # -> (batch_size, 4)
 
-                            mask = (channel != 25).unsqueeze(-1).float()  # -> (batch_size, 1)
-                            power_onehot = power_onehot * mask  # -> (batch_size, 4)
+                            # mask = (channel != 25).unsqueeze(-1).float()  # -> (batch_size, 1)
+                            # power_onehot = power_onehot * mask  # -> (batch_size, 4)
                             # 3) 拼成 (batch_size, 30)
                             full = torch.cat([channel_onehot, power_onehot], dim=-1)  # -> (batch_size, 30)
                             processed.append(full)
@@ -290,5 +290,4 @@ class OffPolicyHARunner(OffPolicyBaseRunner):
                 for agent_id in range(self.num_agents):
                     self.actor[agent_id].soft_update()
             self.critic.soft_update()
-
-        return critic_loss
+            return critic_loss

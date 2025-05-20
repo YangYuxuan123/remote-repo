@@ -4,7 +4,7 @@ import gym
 from harl.utils.envs_tools import check, get_shape_from_obs_space
 from harl.models.base.cnn import CNNBase
 from harl.models.base.mlp import MLPBase
-from torch.distributions import Categorical
+from harl.models.base.distributions import FixedCategorical
 from harl.models.base.act import ACTLayer
 
 class MultiBranchStochasticPolicy(nn.Module):
@@ -70,23 +70,30 @@ class MultiBranchStochasticPolicy(nn.Module):
         actor_features = self.base(obs)  # 共享特征
         channel_action, channel_logp = self.channel_branch(actor_features, available_actions, deterministic)  # channel_logp信道动作的对数概率
         channel_action = channel_action.squeeze(-1)
-
         # 功率分支（仅在选信道时有效）
         power_logits = self.power_branch(actor_features)
         if available_actions is not None:
             # 可用功率索引在 available_actions 第 26:30 列
             power_mask = available_actions[:, 26:26 + power_logits.size(-1)].bool()
             power_logits = torch.where(power_mask, power_logits, torch.full_like(power_logits, -1e10))
-
-        no_ch_mask = channel_action == (self.action_space["channel"].n - 1)
-        if no_ch_mask.any():
-            # 将 logits 全部置零，使后续 argmax=0, sample=0
-            power_logits[no_ch_mask] = 0.0
-        # 5) 构造分布并选择动作
-        power_dist = Categorical(logits=power_logits)
+        # 构造分布并选择动作（无论是否有信道，先正常计算）
+        power_dist = FixedCategorical(logits=power_logits)
         power_action = power_dist.sample() if stochastic else power_logits.argmax(dim=-1)
-        # 6) 计算 log-prob
-        power_logp = power_dist.log_prob(power_action).unsqueeze(-1)
+        power_logp = power_dist.log_prob(power_action.squeeze(-1)).unsqueeze(-1)
+        # 特殊业务逻辑：未选信道时强制功率动作=0
+        no_ch_mask = channel_action == (self.action_space["channel"].n - 1)
+        power_action = power_action.squeeze(-1)
+        if no_ch_mask.any():
+            power_action = torch.where(  # 直接覆盖动作结果
+                no_ch_mask,
+                torch.zeros_like(power_action),  # 未选信道时强制功率=0
+                power_action  # 否则保留原动作
+            )
+            power_logp = torch.where(
+                no_ch_mask.unsqueeze(-1),
+                torch.full_like(power_logp, 0.0),  # 保留计算图
+                power_logp
+            )
 
         return {"channel": channel_action, "power": power_action}
 
