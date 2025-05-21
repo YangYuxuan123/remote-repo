@@ -101,42 +101,33 @@ class SoftTwinContinuousQCritic(TwinContinuousQCritic):
         assert gamma.__class__.__name__ == "ndarray"
 
         share_obs = check(share_obs).to(**self.tpdv)
-        if self.action_type == "Dict":
-            # 假设actions是形状为(n_agents, batch_size)的ndarray，需先重组为字典
-            actions_dict = {
-                "channel": actions[:, :, 0],  # 信道动作索引
-                "power": actions[:, :, 1]  # 功率动作索引
-            }
-            # 转换为one-hot拼接
-            channel_onehot = F.one_hot(
-                check(actions_dict["channel"]).to(**self.tpdv_a),
-                num_classes=26
-            )  # shape: (n_agents, batch_size, 26)
-            power_onehot = F.one_hot(
-                check(actions_dict["power"]).to(**self.tpdv_a),
-                num_classes=4
-            )  # shape: (n_agents, batch_size, 4)
-            # 拼接并处理无效功率动作（信道动作为25时功率无效）
-            # mask = (check(actions_dict["channel"]).to(**self.tpdv_a) != 25).unsqueeze(-1).float()
-            # power_onehot = power_onehot * mask.float()
-            processed_actions = torch.cat([channel_onehot, power_onehot], dim=-1)  # shape: (n_agents, batch_size, 30)
-            # processed_actions是已执行的动作
-            # 展平以适应Critic输入（假设Critic已适配30维动作输入）
-            n_agents, batch_size, act_dim = processed_actions.shape
 
-            if self.state_type == "FP":
-                processed_actions = processed_actions.view(-1, act_dim)
-            elif self.state_type == "EP":
-                processed_actions = (
-                    processed_actions
-                    .permute(1, 0, 2)  # -> (batch_size, n_agents, act_dim)
-                    .reshape(batch_size, -1)  # -> (batch_size, n_agents * act_dim)
-                )
-            else:
-                processed_actions = processed_actions
-
-            actions = processed_actions
-
+        if self.action_type == "Box":
+            actions = check(actions).to(**self.tpdv)
+            actions = torch.cat([actions[i] for i in range(actions.shape[0])], dim=-1)
+        else:
+            actions = check(actions).to(**self.tpdv_a)
+            one_hot_actions = []
+            for agent_id in range(len(actions)):
+                if self.action_type == "MultiDiscrete":
+                    action_dims = self.act_space[agent_id].nvec
+                    one_hot_action = []
+                    for dim in range(len(action_dims)):
+                        one_hot = F.one_hot(
+                            actions[agent_id, :, dim], num_classes=action_dims[dim]
+                        )
+                        one_hot_action.append(one_hot)
+                    one_hot_action = torch.cat(one_hot_action, dim=-1)
+                else:
+                    one_hot_action = F.one_hot(
+                        actions[agent_id], num_classes=self.act_space[agent_id].n
+                    )
+                one_hot_actions.append(one_hot_action)
+            actions = torch.squeeze(torch.cat(one_hot_actions, dim=-1), dim=1).to(
+                **self.tpdv_a
+            )
+        if self.state_type == "FP":
+            actions = torch.tile(actions, (self.num_agents, 1))
         reward = check(reward).to(**self.tpdv)
         done = check(done).to(**self.tpdv)
         valid_transition = check(np.concatenate(valid_transition, axis=0)).to(
@@ -145,43 +136,17 @@ class SoftTwinContinuousQCritic(TwinContinuousQCritic):
         term = check(term).to(**self.tpdv)
         gamma = check(gamma).to(**self.tpdv)
         next_share_obs = check(next_share_obs).to(**self.tpdv)
-
-        if self.action_type == "Dict":
-            processed_next_actions = []
-            for action_dict in next_actions:
-                channel = check(action_dict["channel"]).to(**self.tpdv_a)
-                power = check(action_dict["power"]).to(**self.tpdv_a)
-                # one-hot 编码
-                channel_onehot = F.one_hot(channel, num_classes=26)
-                power_onehot = F.one_hot(power, num_classes=4)
-                # 屏蔽 channel=25 时的 power
-                # mask = (channel != 25).unsqueeze(-1).float()
-                # power_onehot = power_onehot * mask
-                full_action = torch.cat([channel_onehot, power_onehot], dim=-1)
-                full_action = full_action.squeeze(1)
-                processed_next_actions.append(full_action)
-            next_actions = torch.stack(processed_next_actions, dim=0).to(**self.tpdv_a)
-            n_agents, batch_size, act_dim = next_actions.shape
-            if self.state_type == "EP":
-                # Environment‐Provided 模式，share_obs is (batch, share_obs_dim)
-                # 先把维度置为 (batch, n_agents, act_dim)，再 flatten
-                next_actions = (
-                    next_actions
-                    .permute(1, 0, 2)  # -> (batch_size, n_agents, act_dim)
-                    .reshape(batch_size, -1)  # -> (batch_size, n_agents * act_dim)
-                )
-            else:
-                # 其他模式，若无特殊需求可保持原样
-                next_actions = next_actions
-            next_actions = next_actions
-
-        if self.state_type == "EP":
-            next_logp_actions_list = next_logp_actions
-            logp_cat = torch.cat([logp.unsqueeze(-1) for logp in next_logp_actions_list], dim=1)  # → (batch_size, n_agents)
-            joint_logp = logp_cat.sum(dim=1, keepdim=True)  # → (batch_size, 1)
-            next_logp_actions = joint_logp.squeeze(-1)
-
-        next_q_values1 = self.target_critic(next_share_obs, next_actions)
+        if self.action_type == "Box":
+            next_actions = torch.cat(next_actions, dim=-1).to(**self.tpdv)
+        else:
+            next_actions = torch.cat(next_actions, dim=-1).to(**self.tpdv_a)
+        next_logp_actions = torch.sum(
+            torch.cat(next_logp_actions, dim=-1), dim=-1, keepdim=True
+        ).to(**self.tpdv)
+        if self.state_type == "FP":
+            next_actions = torch.tile(next_actions, (self.num_agents, 1))
+            next_logp_actions = torch.tile(next_logp_actions, (self.num_agents, 1))
+        next_q_values1 = self.target_critic(next_share_obs, next_actions) #
         next_q_values2 = self.target_critic2(next_share_obs, next_actions)
         next_q_values = torch.min(next_q_values1, next_q_values2)
         if self.use_proper_time_limits:
@@ -209,7 +174,30 @@ class SoftTwinContinuousQCritic(TwinContinuousQCritic):
                     next_q_values - self.alpha * next_logp_actions
                 ) * (1 - done)
         if self.use_huber_loss:
-            if self.state_type == "EP":
+            if self.state_type == "FP" and self.use_policy_active_masks:
+                critic_loss1 = (
+                    torch.sum(
+                        F.huber_loss(
+                            self.critic(share_obs, actions),
+                            q_targets,
+                            delta=self.huber_delta,
+                        )
+                        * valid_transition
+                    )
+                    / valid_transition.sum()
+                )
+                critic_loss2 = (
+                    torch.mean(
+                        F.huber_loss(
+                            self.critic2(share_obs, actions),
+                            q_targets,
+                            delta=self.huber_delta,
+                        )
+                        * valid_transition
+                    )
+                    / valid_transition.sum()
+                )
+            else:
                 critic_loss1 = torch.mean(
                     F.huber_loss(
                         self.critic(share_obs, actions),
@@ -225,7 +213,22 @@ class SoftTwinContinuousQCritic(TwinContinuousQCritic):
                     )
                 )
         else:
-            if self.state_type == "EP":
+            if self.state_type == "FP" and self.use_policy_active_masks:
+                critic_loss1 = (
+                    torch.sum(
+                        F.mse_loss(self.critic(share_obs, actions), q_targets)
+                        * valid_transition
+                    )
+                    / valid_transition.sum()
+                )
+                critic_loss2 = (
+                    torch.sum(
+                        F.mse_loss(self.critic2(share_obs, actions), q_targets)
+                        * valid_transition
+                    )
+                    / valid_transition.sum()
+                )
+            else:
                 critic_loss1 = torch.mean(
                     F.mse_loss(self.critic(share_obs, actions), q_targets)
                 )
@@ -236,6 +239,3 @@ class SoftTwinContinuousQCritic(TwinContinuousQCritic):
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
         self.critic_optimizer.step()
-
-        return {"critic": critic_loss.item()}
-

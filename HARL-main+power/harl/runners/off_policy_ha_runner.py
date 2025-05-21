@@ -1,11 +1,9 @@
 """Runner for off-policy HARL algorithms."""
 import torch
-import os
 import numpy as np
 import torch.nn.functional as F
 from harl.utils.discrete_util import gumbel_softmax_sample
 from harl.runners.off_policy_base_runner import OffPolicyBaseRunner
-from torch.utils.tensorboard import SummaryWriter
 
 class OffPolicyHARunner(OffPolicyBaseRunner):
     """Runner for off-policy HA algorithms."""
@@ -13,7 +11,6 @@ class OffPolicyHARunner(OffPolicyBaseRunner):
     def train(self):
         """Train the model"""
         self.total_it += 1  #记录update_num更新的计数器
-
         data = self.buffer.sample()
         (
             sp_share_obs,  # EP: (batch_size, dim), FP: (n_agents * batch_size, dim)
@@ -57,7 +54,7 @@ class OffPolicyHARunner(OffPolicyBaseRunner):
                 # next_logp_actions,下一个时间步每个智能体动作的对数概率，是一个列表每个元素对应一个智能体在下一个观察状态下的动作对数概率
                 # sp_gamma,每个智能体折扣因子，是一个列表其中每个元素对应一个智能体折扣因子
                 # self.value_normalizer,值归一化器，用于归一化预测值的工具，帮助稳定训练过程
-            critic_loss = self.critic.train(
+            self.critic.train(
                 sp_share_obs,
                 sp_actions,
                 sp_reward,
@@ -70,8 +67,6 @@ class OffPolicyHARunner(OffPolicyBaseRunner):
                 sp_gamma,
                 self.value_normalizer,
             )
-            # return critic_loss
-
         else:
             next_actions = []
             for agent_id in range(self.num_agents):
@@ -118,7 +113,7 @@ class OffPolicyHARunner(OffPolicyBaseRunner):
                     # train this agent
                     actions[agent_id], logp_actions[agent_id] = self.actor[
                         agent_id
-                    ].get_actions_with_logprobs(
+                    ].get_actions_with_logprobs( 
                         sp_obs[agent_id],
                         sp_available_actions[agent_id]
                         if sp_available_actions is not None
@@ -126,28 +121,7 @@ class OffPolicyHARunner(OffPolicyBaseRunner):
                     )
                     if self.state_type == "EP":
                         logp_action = logp_actions[agent_id]
-                        processed = []
-                        for action_dict in actions:
-                            channel = action_dict["channel"].squeeze(-1)  # (batch_size,)
-                            power = action_dict["power"].squeeze(-1)  # (batch_size,)
-
-                            channel_onehot = F.one_hot(channel, num_classes=26)  # -> (batch_size, 26)
-                            power_onehot = F.one_hot(power, num_classes=4)  # -> (batch_size, 4)
-
-                            # mask = (channel != 25).unsqueeze(-1).float()  # -> (batch_size, 1)
-                            # power_onehot = power_onehot * mask  # -> (batch_size, 4)
-                            # 3) 拼成 (batch_size, 30)
-                            full = torch.cat([channel_onehot, power_onehot], dim=-1)  # -> (batch_size, 30)
-                            processed.append(full)
-
-                        actions_stack = torch.stack(processed, dim=0)  # -> (n_agents, batch_size, 30)
-                        n_agents, batch_size, act_dim = actions_stack.shape
-                        actions_t = (
-                            actions_stack
-                            .permute(1, 0, 2)  # -> (batch_size, n_agents, act_dim)
-                            .reshape(batch_size, n_agents * act_dim)  # -> (batch_size, n_agents*act_dim)
-                        )
-                        #actions_t = torch.cat(actions, dim=-1)
+                        actions_t = torch.cat(actions, dim=-1)
                     elif self.state_type == "FP":
                         logp_action = torch.tile(
                             logp_actions[agent_id], (self.num_agents, 1)
@@ -184,14 +158,7 @@ class OffPolicyHARunner(OffPolicyBaseRunner):
                     self.actor[agent_id].actor_optimizer.zero_grad()
                     actor_loss.backward()
                     self.actor[agent_id].actor_optimizer.step()
-                    # —— 写入 TensorBoard ——
-                    self.agent_writer.add_scalar(
-                        f"loss/actor_loss_agent_{agent_id}",
-                        actor_loss.item(),
-                        self.total_it
-                    )
                     self.actor[agent_id].turn_off_grad()
-
                     # train this agent's alpha
                     if self.algo_args["algo"]["auto_alpha"]:
                         log_prob = (
@@ -290,4 +257,3 @@ class OffPolicyHARunner(OffPolicyBaseRunner):
                 for agent_id in range(self.num_agents):
                     self.actor[agent_id].soft_update()
             self.critic.soft_update()
-            return critic_loss

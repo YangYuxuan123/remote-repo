@@ -1,9 +1,7 @@
 import copy
 import importlib
 import logging
-import gym
 import random
-import itertools
 import numpy as np
 import pandas as pd
 import supersuit as ss
@@ -44,7 +42,7 @@ class DSA_MarkovEnv:
         self.generate_Dk()
         self.cur_step = 0
         self.num_channels = 25 #总信道有32个(从0开始算)，聚合信道有25个(从0开始算)
-        self.num_channel = [25, 25, 25]
+        self.num_channel = [25,25,25]
         self.num_agents = 3
         self.env = DSA_Markov(self.num_channel,self.num_channels, self.num_agents)  #初始化马尔科夫环境
         self.env_copy = copy.deepcopy(self.env)
@@ -52,8 +50,7 @@ class DSA_MarkovEnv:
         self.sense_error_prob_max = 0.2
         self.sense_error_prob = np.random.uniform(0, self.sense_error_prob_max, size=(self.num_agents, self.num_channels))
 
-        #self.SU_power = 20
-        self.SU_power = [5, 10, 20, 30]
+        self.SU_power = 20
         self.PU_power = 40
         self.n_agents = self.num_agents
 
@@ -70,25 +67,13 @@ class DSA_MarkovEnv:
             'agent_2': MultiBinary(self.senselength),
         }
         self.observation_space = self.unwrap(self.observation_spaces)
+        self.action_spaces = {
+            'agent_0': Discrete(self.num_channels+1),
+            'agent_1': Discrete(self.num_channels+1),
+            'agent_2': Discrete(self.num_channels+1),
+        }
 
-        self.action_spaces = gym.spaces.Dict({
-            'agent_0': gym.spaces.Dict({
-                'channel': Discrete(self.num_channels + 1),
-                'power': Discrete(4)
-            }),
-            'agent_1': gym.spaces.Dict({
-                'channel': Discrete(self.num_channels + 1),
-                'power': Discrete(4)
-            }),
-            'agent_2': gym.spaces.Dict({
-                'channel': Discrete(self.num_channels + 1),
-                'power': Discrete(4)
-            })
-        })
-
-        #self.action_space = self.unwrap(self.action_spaces)
-        self.action_space = self.action_spaces
-
+        self.action_space = self.unwrap(self.action_spaces)
         self._seed = 0
 
     def step(self, actions):
@@ -105,8 +90,8 @@ class DSA_MarkovEnv:
         self.fail_ALOHA = 0
         self.fail_TDMA = 0
         self.fail_collision = 0  # 当前步智能体间碰撞失败次数
-        actions = actions.astype(int)
-        '''actions = [item for sublist in actions for item in sublist]'''
+        actions= actions.astype(int)
+        actions = [item for sublist in actions for item in sublist]
         #self.render()
         #self.env.render_SINR()  此处self.Dk是正常生成的
         obs, rew, done, info = self.env.step(actions, self.Dk)
@@ -125,7 +110,7 @@ class DSA_MarkovEnv:
         s_obs = self.repeat(self.env.get_state())
 
         total_reward = sum([rew[agent] for agent in self.agents])
-        rewards = [[total_reward]] * self.n_agents
+        rewards = [[total_reward]]*self.n_agents
         self.success = self.env.success
         self.fail_PU = self.env.fail_PU
         self.fail_TDMA = self.env.fail_TDMA
@@ -163,7 +148,7 @@ class DSA_MarkovEnv:
         self._seed += 1
         self.cur_step = 0
         self.generate_Dk()
-        obs = self.unwrap(self.env.get_obs([[0, 0], [0, 0], [0, 0]]))
+        obs = self.unwrap(self.env.get_obs([0,0,0]))
         s_obs = self.repeat(self.env.get_state())
         return obs, s_obs, self.get_avail_actions()  #
 
@@ -178,19 +163,9 @@ class DSA_MarkovEnv:
         self.Dk = [random.choice([2, 4, 6]) for _ in range(3)]
         return self.Dk
 
-    '''def get_avail_agent_actions(self, agent_id):
-        """Returns the available actions for agent_id"""
-        return [1] * self.action_space[agent_id].n'''
-
     def get_avail_agent_actions(self, agent_id):
         """Returns the available actions for agent_id"""
-        agent_key = f"agent_{agent_id}"  # 构造对应代理的键
-        agent_action_space = self.action_space[agent_key]  # 通过键获取该代理的动作空间字典
-        # 计算该代理所有动作空间的总维度（例如 channel 和 power 的维度）
-        total_actions = sum(sub_space.n for sub_space in agent_action_space.values())
-        # 生成一个长度为 total_actions 的可用动作列表，所有动作均可用
-        avail_actions = [1] * total_actions
-        return avail_actions
+        return [1] * self.action_space[agent_id].n
 
     def render(self):
         self.env.render()

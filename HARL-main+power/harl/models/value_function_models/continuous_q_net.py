@@ -1,36 +1,16 @@
 import numpy as np
 import torch
 import torch.nn as nn
-import gym
 from harl.models.base.plain_cnn import PlainCNN
 from harl.models.base.plain_mlp import PlainMLP
 from harl.utils.envs_tools import get_shape_from_obs_space
 from harl.utils.discrete_util import gumbel_softmax_sample
 
 
-'''def get_combined_dim(cent_obs_feature_dim, act_spaces):
-    """Get the combined dimension of central observation and individual actions."""
-    combined_dim = cent_obs_feature_dim
-    combined_dim = len(act_spaces) * 26 + combined_dim  # combined_dim是32
-    return combined_dim'''
-
 def get_combined_dim(cent_obs_feature_dim, act_spaces):
     """Get the combined dimension of central observation and individual actions."""
     combined_dim = cent_obs_feature_dim
-
-    # 遍历每个代理的动作空间
-    for agent_id, agent_action_space in act_spaces.items():
-        # 对于每个代理的动作空间，累加 channel 和 power 的维度
-        for action_name, action_space in agent_action_space.items():
-            if isinstance(action_space, gym.spaces.Discrete):
-                combined_dim += action_space.n  # 对离散空间，使用 n 来获取维度
-            elif isinstance(action_space, gym.spaces.Box):
-                combined_dim += action_space.shape[0]  # 对连续空间，使用 shape[0] 获取维度
-            else:
-                raise NotImplementedError(f"Unsupported action space type: {type(action_space)}")
-
-    return combined_dim
-
+    combined_dim = len(act_spaces) * 26 + combined_dim
     # for space in act_spaces:
     #     if space.__class__.__name__ == "Box":
     #         combined_dim += space.shape[0]
@@ -40,6 +20,8 @@ def get_combined_dim(cent_obs_feature_dim, act_spaces):
     #         action_dims = space.nvec
     #         for action_dim in action_dims:
     #             combined_dim += action_dim
+
+    return combined_dim
 
 
 class ContinuousQNet(nn.Module):
@@ -137,6 +119,21 @@ class ContinuousQNet(nn.Module):
             feature = self.feature_extractor(cent_obs)
         else:
             feature = cent_obs
+        # print(cent_obs,actions,"000")
+        # print(feature.cpu().numpy(),"feature")
+        # print(actions.cpu().numpy(),"actions")
+        # print(feature,actions,"hjhj")
+        # print(len(feature),len(actions),"hjhj")
+
+
+        # print(len(feature),len(actions),len(feature[0]),len(actions[0]),"hjhj")
+        #print(len(cent_obs),len(actions))
+        # print(cent_obs.requires_grad,"grad")
+        # print(actions.requires_grad,"grad")
+        #actions=self.action_embedding(actions)
+        #print(feature,actions)
+        # print(feature,len(feature))
+        # print(actions,len(actions),"a,,,")
         concat_x = torch.cat([feature, actions], dim=-1)
         #print(concat_x,len(concat_x))
         #print(concat_x,"d")

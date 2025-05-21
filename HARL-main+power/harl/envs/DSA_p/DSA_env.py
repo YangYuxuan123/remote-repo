@@ -3,6 +3,7 @@ from collections import defaultdict
 import numpy as np
 import matplotlib.pyplot as plt
 import copy
+import torch
 import random
 
 from gym import spaces
@@ -18,11 +19,11 @@ class DSA_Markov():
             sense_error_prob_max = 0.1,
             punish_interfer_PU = -5
     ):
-        self.cur_step = 0#初始值
+        self.cur_step = 0  # 初始值
         self.nc_all = nc_all
         self.n_channels = n_channels #在所有信道中感知聚合频带感知了几次，也就是说所有信道中有多少个聚合频带
         self.senselength = 8 #感知长度
-        self.DK = [2,4,6]  #带宽要求
+        self.DK = [2, 4, 6]  #带宽要求
         self.num_agents = num_agents # The number of the SUs
 
         self._has_reset = False
@@ -31,14 +32,13 @@ class DSA_Markov():
 
         #初始化马尔可夫环境
         self._build_Markov_channel()
-        #self.generate_Dk()
         #初始化位置
         self._build_location()
 
         self.Noise = 1 * np.float_power(10, -8)
         self.fc = 5
         self.K = 5
-        self.SU_power = 20
+        self.SU_power = [5, 10, 20, 30]
         self.PU_power = 40
 
         self.render_SINR()
@@ -142,7 +142,7 @@ class DSA_Markov():
     def sense(self):
         tmp_dice = np.random.uniform(0, 1, size=(self.num_agents, self.n_channels+self.senselength-1))  # roll the dice between 0 and 1
         error_index = tmp_dice < self.sense_error_prob # True: sensing error happens, False: sensing is correct
-        self.sensing_result = self.channel_state*(1-error_index) + (1-self.channel_state)*(error_index)
+        self.sensing_result = self.channel_state * (1-error_index) + (1-self.channel_state)*(error_index)
         #sensing_result 通过布尔运算得出感知结果
         return self.sensing_result
 
@@ -157,7 +157,7 @@ class DSA_Markov():
         ]
         return self.getstate
 
-    def get_obs(self,action):
+    def get_obs(self, action):
         obs2_all=self.get_state() #这一步得到的是 sensing result[0]
         obsblock=[[obs2_all[i:i + self.senselength] for i in range(self.n_channels)],
                   [obs2_all[i:i + self.senselength] for i in range(self.n_channels)],
@@ -169,10 +169,10 @@ class DSA_Markov():
         #obs2=[[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0]]
 
         for i in range(self.num_agents):
-            if action[i] == self.n_channels:
+            if action[i][0] == self.n_channels:
                 obs2[i] = np.zeros(self.senselength)
             else:
-                obs2[i] = obsblock[i][action[i]]
+                obs2[i] = obsblock[i][action[i][0]]
         agents = ['agent_0', 'agent_1', 'agent_2']
         obs = {agent: observation for agent, observation in zip(agents, obs2)}
 
@@ -195,8 +195,8 @@ class DSA_Markov():
 
     def check_overlap_and_ones2(self,pos2, channel_state, channel_blockposition, action, Dk):
         for i in range(len(action)):
-            if (action[i] != self.n_channels):
-                pos1 = channel_blockposition[action[i]]
+            if (action[i][0] != self.n_channels):
+                pos1 = channel_blockposition[action[i][0]]
                 if pos1 != pos2:
                     overlap = set(pos1).intersection(set(pos2))
                     non_overlap_pos1 = [pos for pos in pos1 if pos not in overlap]
@@ -230,20 +230,20 @@ class DSA_Markov():
 
         for k in range(self.num_agents):  # 0,1,2
             Interferecne_SU = 0  # 干扰
-            if (action[k] == self.n_channels):#or self.channelagg_state[k]==0: # action is not choosing any channel
+            if (action[k][0] == self.n_channels):  # or self.channelagg_state[k]==0: # action is not choosing any channel
                 rewards[k] = -3
 
-            else: # action is choosing one of channel blocks
+            else:  # action is choosing one of channel blocks
                 # 获取当前聚合信道的协议比例
-                pu_ratio, aloha_ratio, tdma_ratio = self.protocol_ratios[action[k]]
+                pu_ratio, aloha_ratio, tdma_ratio = self.protocol_ratios[action[k][0]]
                 dk_index = self.DK.index(Dk[k])  # 获取当前Dk对应的索引
                 current_agg_state = self.channelagg_states[dk_index]  # 选择对应的状态列表
 
                 for q in range(self.num_agents):
-                    if action[q] != self.n_channels and self.check_overlap_and_ones(self.channel_position[action[k]], self.channel_position[action[q]],self.channel_state, Dk[k]):  # 表示代理 q选择了一个有效的频道
-                        Interferecne_SU = Interferecne_SU + SU_sigma2[k][q] * self.SU_power  # 代理和代理的选择之间有冲突的话，SU的干扰则变成
-                cb = self.channel_position[action[k]]  # cb等于代理 k选择的聚合信道每个信道的具体索引,action[k]表示代理 k(0,1,2)选择的聚合信道索引
-                x_f = sum(self.H2[k, ch] * self.SU_power for ch in cb)
+                    if action[q][0] != self.n_channels and self.check_overlap_and_ones(self.channel_position[action[k][0]], self.channel_position[action[q][0]],self.channel_state, Dk[k]):  # 表示代理 q选择了一个有效的频道
+                        Interferecne_SU = Interferecne_SU + SU_sigma2[k][q] * self.SU_power[action[k][1]]   # 代理和代理的选择之间有冲突的话，SU的干扰则变成
+                cb = self.channel_position[action[k][0]]  # cb等于代理 k选择的聚合信道每个信道的具体索引,action[k]表示代理 k(0,1,2)选择的聚合信道索引
+                x_f = sum(self.H2[k, ch] * self.SU_power[action[k][1]] for ch in cb)
                 y_f = sum(self.Interferecne_PU[k, ch] for ch in cb)
                 SINR = x_f / (Interferecne_SU + y_f + self.Noise * Dk[k])
                 base_reward = Dk[k] * np.log2(1 + SINR)
@@ -252,11 +252,11 @@ class DSA_Markov():
                 if aloha_ratio >= 0:
                     # 统计选择信道块相邻且在ALOHA区域有显著重叠的冲突
                     same_cb_agents = [q for q in range(self.num_agents)
-                                          if action[q] == action[k] and q != k]
+                                          if action[q][0] == action[k][0] and q != k]
                     aloha_collisions = len(same_cb_agents)
 
                 # PU部分惩罚（原有逻辑）
-                pu_penalty = self.punish_interfer_PU * pu_ratio if current_agg_state[action[k]] == 0 else 0
+                pu_penalty = self.punish_interfer_PU * pu_ratio if current_agg_state[action[k][0]] == 0 else 0
 
                 # ALOHA部分奖励
                 aloha_reward = 0
@@ -274,15 +274,15 @@ class DSA_Markov():
                 # 组合奖励
                 rewards[k] = base_reward + aloha_reward + tdma_reward + pu_penalty
 
-                if current_agg_state[action[k]] == 1:
-                    panduan, bili = self.check_overlap_and_ones2(self.channel_position[action[k]], self.channel_state, self.channel_position, action, Dk[k])
+                if current_agg_state[action[k][0]] == 1:
+                    panduan, bili = self.check_overlap_and_ones2(self.channel_position[action[k][0]], self.channel_state, self.channel_position, action, Dk[k])
                     if (panduan):
                         #成功传输
                         self.success = self.success + 1   #怪怪的
                         rewards[k] = rewards[k]
                     else:
                         # 和SU碰撞失败
-                        self.fail_collision = self.fail_collision+ 1
+                        self.fail_collision = self.fail_collision + 1
                         rewards[k] *= ((bili / self.num_agents) + (Dk[k] - bili)) / Dk[k]  # 这个公式很关键，轻易不要变动
                 else:
                     # 和协议碰撞失败
@@ -292,7 +292,7 @@ class DSA_Markov():
                     self.fail_TDMA = self.fail_TDMA + tdma_ratio
                     #print("fail_ALOHA:",self.fail_ALOHA)
                     #print("fail_TDMA:", self.fail_ALOHA)
-                    if (len(np.where(action == action[k])[0]) > 1):
+                    if (len(np.where(action == action[k][0])[0]) > 1):
                         self.fail_collision = self.fail_collision + 1
                     # 如果多个代理选择了相同的信道块，则增加碰撞失败计数
 
@@ -369,10 +369,10 @@ class DSA_Markov():
         # Calculate the channel gain
         SU_d = copy.deepcopy(np.reshape(self.SU_d, (-1, 1)))
         for n in range(self.n_channels+self.senselength-1-1):
-            SU_d = np.hstack( (SU_d, np.reshape(self.SU_d, (-1, 1))) )
-        #less_than_8 = SU_d < 8
+            SU_d = np.hstack((SU_d, np.reshape(self.SU_d, (-1, 1))))
+        # less_than_8 = SU_d < 8
         SU_sigma2 = np.float_power(10, -((41 + 22.7 * np.log10(SU_d) + 20 * np.log10(self.fc / 5)) / 10))
-        #SU_sigma2=np.float_power(10, -((32.45+20*np.log10(self.fc*SU_d))/10))
+        # SU_sigma2=np.float_power(10, -((32.45+20*np.log10(self.fc*SU_d))/10))
 
         CN_real = np.random.normal(0, 1, size=(self.num_agents, self.n_channels+self.senselength-1))
         CN_imag = np.random.normal(0, 1, size=(self.num_agents, self.n_channels+self.senselength-1))
@@ -387,9 +387,9 @@ class DSA_Markov():
 
         self.Interferecne_PU = self.PU_power * PU_sigma2 * (1 - channel_state)
 
-        self.SINR = self.H2 * self.SU_power/(self.Interferecne_PU + self.Noise)
-        #信道功率反映了在特定条件下，信号从发送端到接收端的衰减情况，是评估信号质量的一个重要指标
-        #SU_power 是指次级用户在发送信号时所使用的发射功率。这个功率值决定了次级用户的信号强度。
-        #PU_power 是指主用户在其频谱上发送信号时所使用的发射功率。它决定了主用户信号的强度。
+        #self.SINR = self.H2 * self.SU_power/(self.Interferecne_PU + self.Noise)
+        # 信道功率反映了在特定条件下，信号从发送端到接收端的衰减情况，是评估信号质量的一个重要指标
+        # SU_power 是指次级用户在发送信号时所使用的发射功率。这个功率值决定了次级用户的信号强度。
+        # PU_power 是指主用户在其频谱上发送信号时所使用的发射功率。它决定了主用户信号的强度。
 
 

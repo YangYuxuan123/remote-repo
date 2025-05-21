@@ -22,7 +22,7 @@ class ACTLayer(nn.Module):
         self.action_type = action_space.__class__.__name__
         self.multidiscrete_action = False  # False
 
-        if action_space.__class__.__name__ == "Discrete":
+        if action_space.__class__.__name__ == "Discrete" :
             action_dim = action_space.n
             self.action_out = Categorical(
                 inputs_dim, action_dim, initialization_method, gain
@@ -51,7 +51,7 @@ class ACTLayer(nn.Module):
     def forward(self, x, available_actions=None, deterministic=False):
         """Compute actions and action logprobs from given input.
         Args:
-            x: (torch.Tensor) input to network.输入的特征
+            x: (torch.Tensor) input to network.
             available_actions: (torch.Tensor) denotes which actions are available to agent
                                   (if None, all actions available)
             deterministic: (bool) whether to sample from action distribution or return the mode.
@@ -80,8 +80,9 @@ class ACTLayer(nn.Module):
         else:
             #print(x,available_actions,"avi")#计算给定输入x和可用动作的动作分布
             #x是观测结果或者状态；available_actions是一个可选参数，表示智能体可以执行的动作。如果提供了这个参数，那么动作输出层将只考虑这些可用的动作来计算动作分布
-            channel_available_actions = available_actions[:, :26]  # 假设前 26 是信道动作
-            action_distribution = self.action_out(x, channel_available_actions)
+            # print(x)
+            # print(available_actions,"avi")
+            action_distribution = self.action_out(x, available_actions)
             actions = (
                 action_distribution.mode()
                 if deterministic
@@ -106,8 +107,7 @@ class ACTLayer(nn.Module):
                 action_distribution = action_out(x, available_actions)
                 action_logits.append(action_distribution.logits)
         else:
-            channel_available_actions = available_actions[:, :26]
-            action_distribution = self.action_out(x, channel_available_actions)
+            action_distribution = self.action_out(x, available_actions)
             action_logits = action_distribution.logits
 
         return action_logits

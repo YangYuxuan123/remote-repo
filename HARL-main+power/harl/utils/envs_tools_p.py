@@ -44,7 +44,7 @@ def get_shape_from_obs_space(obs_space):
 #MultiDiscrete 类型，那么动作的形状是 act_space.shape[0]。这是因为 MultiDiscrete 空间表示的是一个多元离散的动作空间，其中的每个动作都是一个整数向量，act_space.shape[0] 是这个向量的长度。
 #Box 类型，那么动作的形状是 act_space.shape[0]。这是因为 Box 空间表示的是一个连续的动作空间，其中的每个动作都是一个实数向量，act_space.shape[0] 是这个向量的长度
 # MultiBinary 类型，那么动作的形状是 act_space.shape[0]。这是因为 MultiBinary 空间表示的是一个多元二值的动作空间，其中的每个动作都是一个二值向量，act_space.shape[0] 是这个向量的长度
-def get_shape_from_act_space(act_space):
+'''def get_shape_from_act_space(act_space):
     """Get shape from action space.
     Args:
         act_space: (gym.spaces) action space
@@ -61,6 +61,26 @@ def get_shape_from_act_space(act_space):
         act_shape = act_space.shape[0]
     else:
         act_shape=1
+    return act_shape'''
+
+def get_shape_from_act_space(act_space):
+    """Get shape from action space, supporting Dict and MultiAgent spaces."""
+    if act_space.__class__.__name__ == "Discrete":
+        act_shape = 1
+    elif act_space.__class__.__name__ == "MultiDiscrete":
+        act_shape = act_space.shape[0]
+    elif act_space.__class__.__name__ == "Box":
+        act_shape = act_space.shape[0]
+    elif act_space.__class__.__name__ == "MultiBinary":
+        act_shape = act_space.shape[0]
+    elif act_space.__class__.__name__ == "Dict":
+        # 计算Dict动作的总维度（各子动作维度之和）
+        act_shape = sum(
+            get_shape_from_act_space(sub_space)
+            for sub_space in act_space.spaces.values()
+        )
+    else:
+        raise ValueError(f"Unsupported action space type: {act_space.__class__.__name__}")
     return act_shape
 
 ##配置文件中设置训练参数：评估间隔 日志间隔 模型目录 并行环境数量 环境步数 训练间隔 每次训练更新次数 是否使用线性学习率衰减

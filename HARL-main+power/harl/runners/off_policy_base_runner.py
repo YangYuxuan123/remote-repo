@@ -3,11 +3,7 @@ import os
 import time
 import torch
 import numpy as np
-import gym
-import gym.spaces
 import setproctitle
-from torch.utils.tensorboard import SummaryWriter
-from gym.spaces import Discrete
 from harl.common.valuenorm import ValueNorm
 from torch.distributions import Categorical
 from harl.utils.trans_tools import _t2n
@@ -40,7 +36,6 @@ class OffPolicyBaseRunner:
         self.env_args = env_args
 
         self.rewardmy = []
-        self.global_step = 0
 
         if "policy_freq" in self.algo_args["algo"]:
             self.policy_freq = self.algo_args["algo"]["policy_freq"]
@@ -100,21 +95,14 @@ class OffPolicyBaseRunner:
                 else None
             )
         self.num_agents = get_num_agents(args["env"], env_args, self.envs)
-        self.critic_writer = SummaryWriter(log_dir=os.path.join(self.log_dir, "critic"))
-        self.agent_writer = SummaryWriter(log_dir=os.path.join(self.log_dir, "actor"))
         self.agent_deaths = np.zeros(
             (self.algo_args["train"]["n_rollout_threads"], self.num_agents, 1)
         )
 
-        #self.action_spaces = self.envs.action_space
         self.action_spaces = self.envs.action_space
-        print(self.action_spaces)
-        '''for agent_id in range(self.num_agents):
-            self.action_spaces[agent_id].seed(algo_args["seed"]["seed"] + agent_id + 1)'''
-
-        for agent_id, agent_action_space in self.action_spaces.items():  # 使用字典的 items() 方法遍历每个代理
-            for action_name, action_space in agent_action_space.items():  # 遍历每个代理的动作空间字典
-                action_space.seed(algo_args["seed"]["seed"] + int(agent_id.split('_')[1]) + 1)  # 设置种子
+        #print(self.action_spaces)
+        for agent_id in range(self.num_agents):
+            self.action_spaces[agent_id].seed(algo_args["seed"]["seed"] + agent_id + 1)
 
         print("share_observation_space: ", self.envs.share_observation_space)
         print("observation_space: ", self.envs.observation_space)
@@ -140,11 +128,11 @@ class OffPolicyBaseRunner:
                 self.actor.append(self.actor[0])
         else:
             self.actor = []
-            for agent_id, agent_key in enumerate(self.envs.action_space.keys()):  # 遍历字典的键
+            for agent_id in range(self.num_agents):
                 agent = ALGO_REGISTRY[args["algo"]](
                     {**algo_args["model"], **algo_args["algo"]},
-                    self.envs.observation_space[agent_id],  # 使用代理的索引访问观察空间
-                    self.envs.action_space[agent_key],  # 使用代理的键（如 'agent_0'）访问动作空间
+                    self.envs.observation_space[agent_id],
+                    self.envs.action_space[agent_id],
                     device=self.device,
                 )
                 self.actor.append(agent)
@@ -198,18 +186,6 @@ class OffPolicyBaseRunner:
         ):
             self.target_entropy = []
             for agent_id in range(self.num_agents):
-                # 获取当前代理的动作空间（Dict 类型）
-                act_space = self.envs.action_space[f"agent_{agent_id}"]
-                agent_entropy = 0
-                # 遍历每个子空间（如 'channel' 和 'power'）
-                for sub_space_name, sub_space in act_space.spaces.items():
-                    if isinstance(sub_space, gym.spaces.Box):
-                        agent_entropy += -np.prod(sub_space.shape)
-                    elif isinstance(sub_space, gym.spaces.Discrete):
-                        agent_entropy += -0.98 * np.log(1.0 / sub_space.n)
-                # 将当前代理的目标熵添加到列表中
-                self.target_entropy.append(agent_entropy)
-            '''for agent_id in range(self.num_agents):
                 if (
                     self.envs.action_space[agent_id].__class__.__name__ == "Box"
                 ):  # Differential entropy can be negative
@@ -220,7 +196,7 @@ class OffPolicyBaseRunner:
                     self.target_entropy.append(
                         -0.98
                         * np.log(1.0 / np.prod(self.envs.action_space[agent_id].shape))
-                    )'''
+                    )
             self.log_alpha = []
             self.alpha_optimizer = []
             self.alpha = []
@@ -317,7 +293,7 @@ class OffPolicyBaseRunner:
             next_obs = new_obs.copy()
             next_share_obs = new_share_obs.copy()
             next_available_actions = new_available_actions.copy()
-            # if len(np.array(available_actions).shape) == 3 else None,
+            #                if len(np.array(available_actions).shape) == 3 else None,
             ##检查available_actions变量的维度，是一个numpy数组形状是一个元组，表示数组在每个维度上大小
             ##维度数量；三维数组；处理多智能体环境中数据时常常需要，因为不同库和算法可能需要不同的数据维度顺序  三维数组返回True
             ##检查是否是一个三维数组为了处理不同数据结构
@@ -361,11 +337,7 @@ class OffPolicyBaseRunner:
                             self.actor[agent_id].lr_decay(step, steps)
                     self.critic.lr_decay(step, steps)
                 for _ in range(update_num):
-                    critic_loss = self.train()
-                    self.critic_writer.add_scalar(
-                        "critic_loss", critic_loss["critic"], self.global_step
-                    )
-                    self.global_step += 1
+                    self.train()
             if step % self.algo_args["train"]["eval_interval"] == 0:   #目前在收集数据，等step达到200的时候，输出一次评估结果
                 cur_step = (
                     self.algo_args["train"]["warmup_steps"]
@@ -446,8 +418,6 @@ class OffPolicyBaseRunner:
             np.save(file_folder + 'fail_PU_hist_7.npy', fail_PU_hist_1_my)
             np.save(file_folder + 'fail_TDMA_hist_7.npy', fail_TDMA_hist_1_my)
             np.save(file_folder + 'fail_ALOHA_hist_7.npy', fail_ALOHA_hist_1_my)
-        self.critic_writer.close()
-        self.agent_writer.close()
 
     def warmup(self):
         """Warmup the replay buffer with random actions"""
@@ -634,24 +604,6 @@ class OffPolicyBaseRunner:
             这段的动作是随机采样的，所有线程的每个代理，都进行随机的采样，最后一共采样了n_rollout_threads*num_agents个动作
         """
         actions = []
-        for agent_id in range(self.num_agents):  # 遍历每个智能体
-            action = []
-            for thread in range(self.algo_args["train"]["n_rollout_threads"]):  # 遍历每个并行环境
-                if available_actions[thread] is None:  # 如果没有限制（即所有动作都可用）
-                    # 从前 26 个信道中随机选择
-                    channel_action = self.action_spaces[agent_id]['channel'].sample()
-                    # 从后 4 个功率级别中随机选择
-                    power_action = self.action_spaces[agent_id]['power'].sample()
-                    action.append((channel_action, power_action))
-                else:
-                    # 只从前 26 个信道动作中随机选择
-                    channel_action = Categorical(torch.tensor(available_actions[thread, agent_id, :26])).sample()
-                    # 只从后 4 个功率动作中随机选择
-                    power_action = Categorical(torch.tensor(available_actions[thread, agent_id, 26:])).sample()
-                    action.append((channel_action, power_action))
-            actions.append(action)
-
-        '''actions = []
         # print(actions,"accsss")#[]
         for agent_id in range(self.num_agents):
             action = []
@@ -664,7 +616,7 @@ class OffPolicyBaseRunner:
                             torch.tensor(available_actions[thread, agent_id, :])
                         ).sample()
                     )
-            actions.append(action)'''
+            actions.append(action)
             # print(actions, "accsss")#每个张量包含一个整数值，可能代表某种特定信息，具体含义取决于在程序上上下文
             ##
             # print(action,"acc")
@@ -675,16 +627,11 @@ class OffPolicyBaseRunner:
         ##代码作用是将动作数组的形状从(n_agents, n_threads)转换为(n_threads, n_agents, 1)，以便于后续的处理。
         ##每个动作通常由一个整数表示，在许多情况下希望动作是一个三维数组，形状为(n_threads, n_agents, 1)，其中n_threads是并行环境的数量，n_agents是智能体的数量。这样可以方便后续的处理，例如广播操作。
         ##离散动作进行转换的目的是为了使动作形状与连续动作空间一致以便于后续处理
-        '''if self.envs.action_space[agent_id].__class__.__name__ == "Discrete":
+        if self.envs.action_space[agent_id].__class__.__name__ == "Discrete":
             return np.expand_dims(np.array(actions).transpose(1, 0), axis=-1)
-        return np.array(actions).transpose(1, 0, 2)'''
-
-        # 如果不是离散空间的情况
-        return np.array(actions).transpose(1, 0, 2)
-
         # print(actions,"accs3")
         # print(np.array(actions).transpose(1, 0, 2),"accs3")
-
+        return np.array(actions).transpose(1, 0, 2)
 
     @torch.no_grad()
     def get_actions(self, obs, available_actions=None, add_random=True):
@@ -710,7 +657,7 @@ class OffPolicyBaseRunner:
                                 available_actions[:, agent_id],
                                 add_random,
                             )
-                        )  # 这里面是算logp的，但是只返回actions
+                        )
                     )
                 else:  # (n_threads, ) of None
                     actions.append(
@@ -732,12 +679,7 @@ class OffPolicyBaseRunner:
                 )
                 #actions = np.squeeze(actions)
                 #print(actions,"j")
-
-        actions = np.array(actions).transpose(1, 0, 2)  # 先变成 numpy array，shape = (3,2)
-        #actions = np.expand_dims(actions, axis=0)  # 再加一个 batch 维度，shape = (1,3,2)
-        return actions
-
-        #return np.array(actions).transpose(1, 0, 2)
+        return np.array(actions).transpose(1, 0, 2)
 
     def train(self):
         """Train the model"""
