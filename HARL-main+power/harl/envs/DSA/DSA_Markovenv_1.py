@@ -44,7 +44,7 @@ class DSA_MarkovEnv:
         self.num_channels = 25 #总信道有32个(从0开始算)，聚合信道有25个(从0开始算)
         self.num_channel = [25, 25, 25]
         self.num_agents = 3
-        self.env = DSA_Markov(self.num_channel, self.num_channels, self.num_agents)  #初始化马尔科夫环境
+        self.env = DSA_Markov(self.num_channel,self.num_channels, self.num_agents)  #初始化马尔科夫环境
         self.env_copy = copy.deepcopy(self.env)
 
         self.sense_error_prob_max = 0.2
@@ -75,9 +75,6 @@ class DSA_MarkovEnv:
 
         self.action_space = self.unwrap(self.action_spaces)
         self._seed = 0
-
-        self.env_step = 0  # 全局步计数器
-        self.location_update_interval = 200  # 每 200 个环境步更新一次位置
 
     def step(self, actions):
         """
@@ -150,10 +147,6 @@ class DSA_MarkovEnv:
         """Returns initial observations and states"""
         self._seed += 1
         self.cur_step = 0
-        self.env_step += self.max_cycles  # 每个 episode 是 max_cycles 步
-        # 每隔 location_update_interval 步更新一次位置
-        if self.env_step % self.location_update_interval == 0:
-            self.env._build_location_SU()
         self.generate_Dk()
         obs = self.unwrap(self.env.get_obs([0, 0, 0]))
         s_obs = self.repeat(self.env.get_state())

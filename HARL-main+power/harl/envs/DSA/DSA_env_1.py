@@ -22,7 +22,7 @@ class DSA_Markov():
         self.nc_all = nc_all
         self.n_channels = n_channels #在所有信道中感知聚合频带感知了几次，也就是说所有信道中有多少个聚合频带
         self.senselength = 8 #感知长度
-        self.DK = [2, 4, 6]  #带宽要求
+        self.DK = [2,4,6]  #带宽要求
         self.num_agents = num_agents # The number of the SUs
 
         self._has_reset = False
@@ -33,8 +33,7 @@ class DSA_Markov():
         self._build_Markov_channel()
         #self.generate_Dk()
         #初始化位置
-        self._build_location_PU()
-        self._build_location_SU()
+        self._build_location()
 
         self.Noise = 1 * np.float_power(10, -8)
         self.fc = 5
@@ -44,14 +43,14 @@ class DSA_Markov():
 
         self.render_SINR()
 
-        self.n_actions = n_channels + 1  # The action space size 26
-        self.n_features = n_channels  # The sensing result space 25
+        self.n_actions = n_channels + 1 # The action space size 26
+        self.n_features = n_channels # The sensing result space 25
 
-        self.sense_error_prob_max = sense_error_prob_max  # 0.1
+        self.sense_error_prob_max = sense_error_prob_max #0.1
         self.sense_error_prob = np.random.uniform(0, self.sense_error_prob_max, size=(self.num_agents, self.n_channels+self.senselength-1))
         self.sense_error_probagent1 = np.random.uniform(0, self.sense_error_prob_max, size=(self.num_agents, self.nc_all[0]))
-        # self.sense_error_prob_agg = np.random.uniform(0, self.sense_error_prob_max, size=(self.num_agents, self.n_channels-self.senselength+1))
-        # self.n_channels+self.senselength-1 是所有信道的长度，一共有多少信道，信道L
+        #self.sense_error_prob_agg = np.random.uniform(0, self.sense_error_prob_max, size=(self.num_agents, self.n_channels-self.senselength+1))
+        #self.n_channels+self.senselength-1 是所有信道的长度，一共有多少信道，信道L
 
         self.punish_interfer_PU = punish_interfer_PU
         self._seed = 1
@@ -97,88 +96,41 @@ class DSA_Markov():
         self.goodToBad_prob_agg = 1 - self.stayGood_prob_agg
         self.badToGood_prob_agg = 1 - self.stayBad_prob_agg
 
-    def _build_location_PU(self):
+    def _build_location(self):
+
         # 初始化PU地址
-        self.PU_TX_x = np.random.uniform(0, 500, self.n_channels + self.senselength - 1)
-        self.PU_TX_y = np.random.uniform(0, 500, self.n_channels + self.senselength - 1)
-        self.PU_RX_x = np.random.uniform(0, 500, self.n_channels + self.senselength - 1)
-        self.PU_RX_y = np.random.uniform(0, 500, self.n_channels + self.senselength - 1)
+        self.PU_TX_x = np.random.uniform(0, 200, self.n_channels + self.senselength - 1)
+        self.PU_TX_y = np.random.uniform(0, 200, self.n_channels + self.senselength - 1)
+        self.PU_RX_x = np.random.uniform(0, 200, self.n_channels + self.senselength - 1)
+        self.PU_RX_y = np.random.uniform(0, 200, self.n_channels + self.senselength - 1)
 
-    def _build_location_SU(self):
-        # 初始化SU发射器位置
-        self.SU_TX_x = np.random.uniform(40, 460, self.num_agents)
-        self.SU_TX_y = np.random.uniform(40, 460, self.num_agents)
+        # 初始化SU发射器地址和SU接收器距离，SU_d是一个过渡变量
+        self.SU_TX_x = np.random.uniform(0+40, 200-40, self.num_agents)
+        self.SU_TX_y = np.random.uniform(0+40, 200-40, self.num_agents)
+        self.SU_d = np.random.uniform(20, 100, self.num_agents)
 
-        # 初始化接收器位置，确保在500×500范围内
-        self.SU_d = np.zeros(self.num_agents)
-        self.SU_RX_x = np.zeros(self.num_agents)
-        self.SU_RX_y = np.zeros(self.num_agents)
+        # 初始化SU接收器地址，SU_RX才是次级用户接收器地址
+        SU_theda = 2 * np.pi * np.random.uniform(0, 1, self.num_agents)
+        SU_dx = self.SU_d * np.cos(SU_theda)
+        SU_dy = self.SU_d * np.sin(SU_theda)
+        self.SU_RX_x = self.SU_TX_x + SU_dx
+        self.SU_RX_y = self.SU_TX_y + SU_dy
 
-        for i in range(self.num_agents):
-            while True:
-                d = np.random.uniform(20, 80)
-                theta = 2 * np.pi * np.random.rand()
-                dx = d * np.cos(theta)
-                dy = d * np.sin(theta)
-                rx_x = self.SU_TX_x[i] + dx
-                rx_y = self.SU_TX_y[i] + dy
-
-                # 边界检查：确保接收器坐标在 [0, 500]
-                if 0 <= rx_x <= 500 and 0 <= rx_y <= 500:
-                    self.SU_d[i] = d
-                    self.SU_RX_x[i] = rx_x
-                    self.SU_RX_y[i] = rx_y
-                    break  # 满足条件后跳出循环
-
-        # 计算 PU 发射器和 SU 接收器之间的距离
+        # PU发射器和SU接收器距离，主用户数量和总信道是一致，次级用户数量和代理数量是一致的
         self.SU_RX_PU_TX_d = np.zeros((self.num_agents, self.n_channels + self.senselength - 1))
         for k in range(self.num_agents):
             for l in range(self.n_channels + self.senselength - 1):
-                dx = self.SU_RX_x[k] - self.PU_TX_x[l]
-                dy = self.SU_RX_y[k] - self.PU_TX_y[l]
-                self.SU_RX_PU_TX_d[k][l] = np.sqrt(dx ** 2 + dy ** 2)
+                self.SU_RX_PU_TX_d[k][l] = np.sqrt(
+                    np.float_power(self.SU_RX_x[k] - self.PU_TX_x[l], 2) + np.float_power(
+                        self.SU_RX_y[k] - self.PU_TX_y[l], 2))
 
-        # 计算 SU 发射器和 SU 接收器之间的距离
+        # SU发射器和SU接收器距离，二者都和代理数目一致
         self.SU_RX_SU_TX_d = np.zeros((self.num_agents, self.num_agents))
         for k1 in range(self.num_agents):
             for k2 in range(self.num_agents):
-                dx = self.SU_RX_x[k1] - self.SU_TX_x[k2]
-                dy = self.SU_RX_y[k1] - self.SU_TX_y[k2]
-                self.SU_RX_SU_TX_d[k1][k2] = np.sqrt(dx ** 2 + dy ** 2)
-
-    def _drift_location(self, drift_speed=1.0):
-        """
-        对所有 SU 进行微小漂移。
-        参数:
-            drift_speed: 控制漂移步长（单位距离）
-        """
-        # 为每个 SU 随机生成一个方向（单位圆上的随机角度）
-        theta = 2 * np.pi * np.random.uniform(0, 1, self.num_agents)
-        # 根据速度和方向，更新 SU 发射器坐标
-        self.SU_TX_x += drift_speed * np.cos(theta)
-        self.SU_TX_y += drift_speed * np.sin(theta)
-        # 保证发射器不出界（边界为 [40, 460]，避免靠边）
-        self.SU_TX_x = np.clip(self.SU_TX_x, 40, 460)
-        self.SU_TX_y = np.clip(self.SU_TX_y, 40, 460)
-        # 重新生成接收器位置（保持距离 SU_d 不变，方向可以重新生成）
-        SU_theta = 2 * np.pi * np.random.uniform(0, 1, self.num_agents)
-        SU_dx = self.SU_d * np.cos(SU_theta)
-        SU_dy = self.SU_d * np.sin(SU_theta)
-
-        self.SU_RX_x = self.SU_TX_x + SU_dx
-        self.SU_RX_y = self.SU_TX_y + SU_dy
-        # 更新 SU_RX 与 PU_TX 的距离
-        for k in range(self.num_agents):
-            for l in range(self.n_channels + self.senselength - 1):
-                self.SU_RX_PU_TX_d[k][l] = np.sqrt(
-                    (self.SU_RX_x[k] - self.PU_TX_x[l]) ** 2 + (self.SU_RX_y[k] - self.PU_TX_y[l]) ** 2
-                )
-        # 更新 SU_RX 与 SU_TX 的距离
-        for k1 in range(self.num_agents):
-            for k2 in range(self.num_agents):
                 self.SU_RX_SU_TX_d[k1][k2] = np.sqrt(
-                    (self.SU_RX_x[k1] - self.SU_TX_x[k2]) ** 2 + (self.SU_RX_y[k1] - self.SU_TX_y[k2]) ** 2
-                )
+                    np.float_power(self.SU_RX_x[k1] - self.SU_TX_x[k2], 2) + np.float_power(
+                        self.SU_RX_y[k1] - self.SU_TX_y[k2], 2))
 
     def close(self):
         """Closes the rendering window."""
@@ -264,7 +216,6 @@ class DSA_Markov():
         self.fail_PU = 0
 
         self.render()
-        self._drift_location(drift_speed=0.5)
         self.render_SINR()
 
         rewards = np.zeros((self.num_agents))
@@ -272,10 +223,10 @@ class DSA_Markov():
         current_slot = self.time_step % 10  # TDMA周期为10个时隙
         tdma_active = (current_slot < 3)  # 前3个时隙激活
 
-        #SU_sigma2 = np.float_power(10, -((41 + 22.7 * np.log10(self.SU_RX_SU_TX_d) + 20 * np.log10(self.fc / 5)) / 10))
+        SU_sigma2 = np.float_power(10, -((41 + 22.7 * np.log10(self.SU_RX_SU_TX_d) + 20 * np.log10(self.fc / 5)) / 10))
         #此处计算的是θ^2,而不是直接的 path loss, θ^2表示信号的强度大小，从而更真实地反映信号在直射路径和散射路径下的实际传输情况。
         for k in range(self.num_agents):
-            self.SU_sigma2[k][k] = 0
+            SU_sigma2[k][k] = 0
 
         for k in range(self.num_agents):  # 0,1,2
             Interferecne_SU = 0  # 干扰
@@ -290,7 +241,7 @@ class DSA_Markov():
 
                 for q in range(self.num_agents):
                     if action[q] != self.n_channels and self.check_overlap_and_ones(self.channel_position[action[k]], self.channel_position[action[q]],self.channel_state, Dk[k]):  # 表示代理 q选择了一个有效的频道
-                        Interferecne_SU = Interferecne_SU + self.SU_sigma2[k][q] * self.SU_power  # 代理和代理的选择之间有冲突的话，SU的干扰则变成
+                        Interferecne_SU = Interferecne_SU + SU_sigma2[k][q] * self.SU_power  # 代理和代理的选择之间有冲突的话，SU的干扰则变成
                 cb = self.channel_position[action[k]]  # cb等于代理 k选择的聚合信道每个信道的具体索引,action[k]表示代理 k(0,1,2)选择的聚合信道索引
                 x_f = sum(self.H2[k, ch] * self.SU_power for ch in cb)
                 y_f = sum(self.Interferecne_PU[k, ch] for ch in cb)
@@ -413,42 +364,32 @@ class DSA_Markov():
             for dk in self.DK
         ]
 
+    def render_SINR(self):
+        # Update the SINR
+        # Calculate the channel gain
+        SU_d = copy.deepcopy(np.reshape(self.SU_d, (-1, 1)))
+        for n in range(self.n_channels+self.senselength-1-1):
+            SU_d = np.hstack((SU_d, np.reshape(self.SU_d, (-1, 1))))
+        #less_than_8 = SU_d < 8
+        SU_sigma2 = np.float_power(10, -((41 + 22.7 * np.log10(SU_d) + 20 * np.log10(self.fc / 5)) / 10))
+        #SU_sigma2=np.float_power(10, -((32.45+20*np.log10(self.fc*SU_d))/10))
+
+        CN_real = np.random.normal(0, 1, size=(self.num_agents, self.n_channels+self.senselength-1))
+        CN_imag = np.random.normal(0, 1, size=(self.num_agents, self.n_channels+self.senselength-1))
+        theda = np.random.uniform(0, 1, size=(self.num_agents, self.n_channels+self.senselength-1))
+        H = np.sqrt(self.K/(self.K+1)*SU_sigma2)*np.exp(1j*2*np.pi*theda) + np.sqrt(1/(self.K+1)*SU_sigma2/2)*(CN_real + 1j*CN_imag)
+        self.H2 = np.float_power(np.absolute(H), 2)
+        #PU干扰
+
+        PU_sigma2 = np.float_power(10, -((41 + 22.7 * np.log10(self.SU_RX_PU_TX_d) + 20 * np.log10(self.fc / 5)) / 10))
+
+        channel_state = np.array([self.channel_state for k in range(self.num_agents)])
+
+        self.Interferecne_PU = self.PU_power * PU_sigma2 * (1 - channel_state)
+
+        self.SINR = self.H2 * self.SU_power/(self.Interferecne_PU + self.Noise)
         #信道功率反映了在特定条件下，信号从发送端到接收端的衰减情况，是评估信号质量的一个重要指标
         #SU_power 是指次级用户在发送信号时所使用的发射功率。这个功率值决定了次级用户的信号强度。
         #PU_power 是指主用户在其频谱上发送信号时所使用的发射功率。它决定了主用户信号的强度。
 
-    def render_SINR(self):
-        # 参数设定
-        shadowing_std = 6  # [dB] 城市场景中阴影衰落的标准差，常用值：4~8 dB
-        doppler_factor = 0.9  # 多普勒因子，控制时变相关性，越大表示用户越慢
 
-        SU_d = np.reshape(self.SU_d, (-1, 1))  # SU-SU 距离向量：shape = (num_agents, 1)
-        for _ in range(self.n_channels + self.senselength - 2):
-            SU_d = np.hstack((SU_d, np.reshape(self.SU_d, (-1, 1))))  # 扩展到每个子信道上
-
-        shadowing_SU_dB = np.random.normal(0, shadowing_std, size=SU_d.shape)
-        PL_SU_dB = 41 + 22.7 * np.log10(SU_d) + 20 * np.log10(self.fc / 5) + shadowing_SU_dB
-        self.SU_sigma2 = np.float_power(10, -PL_SU_dB / 10)
-
-        CN_real = np.random.normal(0, 1, size=self.SU_sigma2.shape)
-        CN_imag = np.random.normal(0, 1, size=self.SU_sigma2.shape)
-        theta = np.random.uniform(0, 1, size=self.SU_sigma2.shape)
-
-        H_new = np.sqrt(self.K / (self.K + 1) * self.SU_sigma2) * np.exp(1j * 2 * np.pi * theta) + \
-                np.sqrt(1 / (self.K + 1) * self.SU_sigma2 / 2) * (CN_real + 1j * CN_imag)
-
-        if not hasattr(self, 'prev_H') or self.prev_H is None:
-            H = H_new
-        else:
-            H = doppler_factor * self.prev_H + np.sqrt(1 - doppler_factor ** 2) * H_new
-        self.prev_H = H
-        self.H2 = np.abs(H) ** 2  # |H|^2 是信道增益
-
-        shadowing_PU_dB = np.random.normal(0, shadowing_std, size=self.SU_RX_PU_TX_d.shape)
-        PL_PU_dB = 41 + 22.7 * np.log10(self.SU_RX_PU_TX_d) + 20 * np.log10(self.fc / 5) + shadowing_PU_dB
-        PU_sigma2 = np.float_power(10, -PL_PU_dB / 10)
-
-        channel_state = np.array([self.channel_state for _ in range(self.num_agents)])
-        self.Interferecne_PU = self.PU_power * PU_sigma2 * (1 - channel_state)
-
-        self.SINR = self.H2 * self.SU_power / (self.Interferecne_PU + self.Noise)
