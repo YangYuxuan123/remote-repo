@@ -77,6 +77,13 @@ class HASAC(OffPolicyBase):
             logp_actions = torch.cat(logp_actions, dim=-1)
         return actions, logp_actions  # 所选动作的数字为分数，其余动作为0
 
+    def get_mean_entropy(self, obs, available_actions=None):
+        logits = self.actor.get_logits(obs, available_actions)
+        probs = torch.softmax(logits, dim=-1)
+        log_probs = torch.log_softmax(logits, dim=-1)
+        entropy = -(probs * log_probs).sum(dim=-1)
+        return entropy.mean()
+
     def save(self, save_dir, id):
         """Save the actor."""
         torch.save(

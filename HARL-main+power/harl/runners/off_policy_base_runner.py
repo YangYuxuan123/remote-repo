@@ -180,6 +180,12 @@ class OffPolicyBaseRunner:
 
         self.total_it = 0  # total iteration
 
+        self.alpha_update_step = 0  # 计步器
+        self.target_entropy_update_interval = self.algo_args["algo"]["target_entropy_update_interval"]
+        self.entropy_update_eta = self.algo_args["algo"]["entropy_update_eta"]
+        # self.target_entropy_update_interval = 1000  # 每隔 K 步更新一次，K 可配置
+        # self.entropy_update_eta = 0.005  # 滑动平均参数 η
+
         if (
             "auto_alpha" in self.algo_args["algo"].keys()
             and self.algo_args["algo"]["auto_alpha"]
@@ -194,9 +200,15 @@ class OffPolicyBaseRunner:
                     )
                 else:  # Discrete entropy is always positive.# Thus we set the max possible entropy as the target entropy
                     self.target_entropy.append(
-                        -0.98
+                        -1.50
                         * np.log(1.0 / np.prod(self.envs.action_space[agent_id].shape))
                     )
+            # 初始化较高 target_entropy（例如：-action_dim）
+            '''self.target_entropy.append(
+                        -0.98
+                        * np.log(1.0 / np.prod(self.envs.action_space[agent_id].shape))
+                    )'''
+
             self.log_alpha = []
             self.alpha_optimizer = []
             self.alpha = []

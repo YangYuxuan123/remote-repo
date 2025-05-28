@@ -72,6 +72,10 @@ algo:
   alpha: 0.1
   # alpha learning rate
   alpha_lr: 0.0003
+  # 目标熵更新的间隔
+  target_entropy_update_interval: 1000
+  # 更新目标熵时的滑动系数
+  entropy_update_eta: 0.005
   # discount factor
   gamma: 0.97
   # off-policy buffer size

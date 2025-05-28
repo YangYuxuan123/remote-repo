@@ -108,6 +108,8 @@ class OffPolicyHARunner(OffPolicyBaseRunner):
                     agent_order = list(range(self.num_agents))
                 else:
                     agent_order = list(np.random.permutation(self.num_agents))
+
+                mean_entropy = [0.0 for _ in range(self.num_agents)]
                 for agent_id in agent_order:
                     self.actor[agent_id].turn_on_grad()
                     # train this agent
@@ -161,17 +163,25 @@ class OffPolicyHARunner(OffPolicyBaseRunner):
                     self.actor[agent_id].turn_off_grad()
                     # train this agent's alpha
                     if self.algo_args["algo"]["auto_alpha"]:
+                        mean_entropy[agent_id] = self.actor[agent_id].get_mean_entropy(sp_obs[agent_id])
+                        # ✅ 每 K 步更新一次 target_entropy（滑动平均）
+                        if self.alpha_update_step % self.target_entropy_update_interval == 0:
+                            self.target_entropy[agent_id] = (
+                                    (1 - self.entropy_update_eta) * self.target_entropy[agent_id]
+                                    + self.entropy_update_eta * mean_entropy[agent_id].item()
+                            )
+
                         log_prob = (
                             logp_actions[agent_id].detach()
                             + self.target_entropy[agent_id]
                         )
                         alpha_loss = -(self.log_alpha[agent_id] * log_prob).mean()
+
                         self.alpha_optimizer[agent_id].zero_grad()
                         alpha_loss.backward()
                         self.alpha_optimizer[agent_id].step()
-                        self.alpha[agent_id] = torch.exp(
-                            self.log_alpha[agent_id].detach()
-                        )
+                        self.alpha[agent_id] = torch.exp(self.log_alpha[agent_id].detach())
+
                     actions[agent_id], _ = self.actor[
                         agent_id
                     ].get_actions_with_logprobs(
@@ -180,9 +190,11 @@ class OffPolicyHARunner(OffPolicyBaseRunner):
                         if sp_available_actions is not None
                         else None,
                     )
+                self.alpha_update_step += 1
                 # train critic's alpha
                 if self.algo_args["algo"]["auto_alpha"]:
                     self.critic.update_alpha(logp_actions, np.sum(self.target_entropy))
+
             else:
                 if self.args["algo"] == "had3qn":
                     actions = []
