@@ -29,6 +29,9 @@ class DSA_Markov():
         self._has_rendered = False
         self._has_updated = False
 
+        self.sinr_history = [[] for _ in range(self.num_agents)]
+        self.file_folder = './myresult/hasac/'
+
         #初始化马尔可夫环境
         self._build_Markov_channel()
         #self.generate_Dk()
@@ -205,7 +208,7 @@ class DSA_Markov():
         ]
         return self.getstate
 
-    def get_obs(self,action):
+    def get_obs(self, action):
         obs2_all=self.get_state() #这一步得到的是 sensing result[0]
         obsblock=[[obs2_all[i:i + self.senselength] for i in range(self.n_channels)],
                   [obs2_all[i:i + self.senselength] for i in range(self.n_channels)],
@@ -281,6 +284,7 @@ class DSA_Markov():
             Interferecne_SU = 0  # 干扰
             if (action[k] == self.n_channels):#or self.channelagg_state[k]==0: # action is not choosing any channel
                 rewards[k] = -3
+                self.sinr_history[k].append(None)
 
             else: # action is choosing one of channel blocks
                 # 获取当前聚合信道的协议比例
@@ -295,6 +299,8 @@ class DSA_Markov():
                 x_f = sum(self.H2[k, ch] * self.SU_power for ch in cb)
                 y_f = sum(self.Interferecne_PU[k, ch] for ch in cb)
                 SINR = x_f / (Interferecne_SU + y_f + self.Noise * Dk[k])
+                SINR_dB = 10 * np.log10(SINR + 1e-9)
+                self.sinr_history[k].append(SINR_dB)
                 base_reward = Dk[k] * np.log2(1 + SINR)
 
                 aloha_collisions = 0
@@ -352,6 +358,10 @@ class DSA_Markov():
 
         rewards = defaultdict(int, zip(agents, rewards))
         return obs, rewards, done, info
+
+    def save_sinr(self):
+        sinr_array = np.array(self.sinr_history)  # shape = (num_agents, time_steps)
+        np.save(self.file_folder + 'sinr_7.npy', sinr_array)
 
 
     def _action_to_list(self, a):
