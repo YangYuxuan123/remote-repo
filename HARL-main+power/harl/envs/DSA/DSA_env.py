@@ -303,6 +303,21 @@ class DSA_Markov():
                 self.sinr_history[k].append(SINR_dB)
                 base_reward = Dk[k] * np.log2(1 + SINR)
 
+                # === 门限机制 ===
+                SINR_dB_threshold = 3.0  # 3 dB 阈值
+                if SINR_dB < SINR_dB_threshold:
+                    base_reward -= 5  # 或者 -10，看实验效果调
+
+                # === 波动惩罚机制 ===
+                N = 5
+                alpha = 1.5  # 控制惩罚强度
+                max_penalty = 4
+                recent_sinrs = [v for v in self.sinr_history[k][-N:] if v is not None]
+                if len(recent_sinrs) == N:
+                    variance_penalty = alpha * np.var(recent_sinrs)
+                    variance_penalty = np.clip(variance_penalty, 0, max_penalty)
+                    base_reward -= variance_penalty
+
                 aloha_collisions = 0
                 if aloha_ratio >= 0:
                     # 统计选择信道块相邻且在ALOHA区域有显著重叠的冲突
