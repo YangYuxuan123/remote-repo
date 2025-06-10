@@ -153,7 +153,7 @@ class DSA_MarkovEnv:
         self.env_step += self.max_cycles  # 每个 episode 是 max_cycles 步
         # 每隔 location_update_interval 步更新一次位置
         if self.env_step % self.location_update_interval == 0:
-            self.env._build_location_SU()
+            # self.env._build_location_SU()
             self.env.save_sinr()
         self.generate_Dk()
         obs = self.unwrap(self.env.get_obs([0, 0, 0]))

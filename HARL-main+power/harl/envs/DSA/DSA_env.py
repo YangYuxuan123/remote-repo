@@ -304,13 +304,13 @@ class DSA_Markov():
                 base_reward = Dk[k] * np.log2(1 + SINR)
 
                 # === 门限机制 ===
-                SINR_dB_threshold = 3.0  # 3 dB 阈值
+                SINR_dB_threshold = 5.0  # 3 dB 阈值
                 if SINR_dB < SINR_dB_threshold:
-                    base_reward -= 5  # 或者 -10，看实验效果调
+                    base_reward -= 4  # 或者 -10，看实验效果调
 
                 # === 波动惩罚机制 ===
-                N = 5
-                alpha = 1.5  # 控制惩罚强度
+                N = 6
+                alpha = 0.5  # 控制惩罚强度
                 max_penalty = 4
                 recent_sinrs = [v for v in self.sinr_history[k][-N:] if v is not None]
                 if len(recent_sinrs) == N:
