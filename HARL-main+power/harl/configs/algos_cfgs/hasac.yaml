@@ -15,7 +15,7 @@ train:
   # number of parallel environments for training data collection
   n_rollout_threads: 20 #20
   # number of total steps
-  num_env_steps: 500000
+  num_env_steps: 300000
   # number of warmup steps
   warmup_steps: 1000
   # number of steps per train
@@ -73,9 +73,9 @@ algo:
   # alpha learning rate
   alpha_lr: 0.0003
   # 目标熵更新的间隔
-  target_entropy_update_interval: 1000
+  target_entropy_update_interval: 800  #800
   # 更新目标熵时的滑动系数
-  entropy_update_eta: 0.005
+  entropy_update_eta: 0.005  #0.003   0.005
   # discount factor
   gamma: 0.97
   # off-policy buffer size
@@ -93,7 +93,7 @@ algo:
   # huber delta
   huber_delta: 10.0
   # whether to share parameter among actors
-  share_param: False
+  share_param: True
   # whether to use a fixed optimisation order
   fixed_order: False
 logger:

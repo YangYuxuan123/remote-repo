@@ -25,7 +25,7 @@ def main():
     parser.add_argument(
         "--algo",
         type=str,
-        default="maddpg", #改
+        default="hasac", #改
         choices=[
             "happo",
             "hatrpo",

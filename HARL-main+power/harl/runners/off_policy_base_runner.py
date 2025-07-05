@@ -200,7 +200,7 @@ class OffPolicyBaseRunner:
                     )
                 else:  # Discrete entropy is always positive.# Thus we set the max possible entropy as the target entropy
                     self.target_entropy.append(
-                        -1.50
+                        -1.5
                         * np.log(1.0 / np.prod(self.envs.action_space[agent_id].shape))
                     )
             # 初始化较高 target_entropy（例如：-action_dim）
