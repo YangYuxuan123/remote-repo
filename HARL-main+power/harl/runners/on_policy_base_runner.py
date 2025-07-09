@@ -1,6 +1,7 @@
 """Base runner for on-policy algorithms."""
 import time
 import numpy as np
+import os
 import torch
 import setproctitle
 from harl.common.valuenorm import ValueNorm
@@ -188,10 +189,13 @@ class OnPolicyBaseRunner:
         )
 
         self.logger.init(episodes)  # logger callback at the beginning of training
-        file_folder = '.\\myresult\\happo\\'
+        #file_folder = '.\\HARL_main_5\\HARL-main+power\\examples\\myresult\\happo\\'
+        file_folder = './myresult/mappo/'
         fail_collision_hist_1_my = []
         success_hist_1_my = []
         fail_PU_hist_1_my=[]
+        fail_TDMA_hist_1_my = []
+        fail_ALOHA_hist_1_my = []
         reward_my=[]
         for episode in range(1, episodes + 1):
             if self.algo_args["train"][
@@ -231,6 +235,8 @@ class OnPolicyBaseRunner:
                     success_hist_1,
                     fail_collision_hist_1,
                     fail_PU_hist_1,
+                    fail_TDMA_hist_1,
+                    fail_ALOHA_hist_1,
                 ) = self.envs.step(actions)
 
                 data = (
@@ -248,6 +254,8 @@ class OnPolicyBaseRunner:
                     success_hist_1,
                     fail_collision_hist_1,
                     fail_PU_hist_1,
+                    fail_TDMA_hist_1,
+                    fail_ALOHA_hist_1,
                 )
 
                 self.logger.per_step(data)  # logger callback at each step
@@ -270,11 +278,15 @@ class OnPolicyBaseRunner:
                 success_hist_1_my.append(critic_train_info["success_hist_1"]/self.num_agents/4000)
                 fail_collision_hist_1_my.append(critic_train_info["fail_collision_hist_1"]/self.num_agents/4000)
                 fail_PU_hist_1_my.append(critic_train_info["fail_PU_hist_1"]/self.num_agents/4000)
+                fail_TDMA_hist_1_my.append(critic_train_info["fail_TDMA_hist_1"] / self.num_agents / 4000)
+                fail_ALOHA_hist_1_my.append(critic_train_info["fail_ALOHA_hist_1"] / self.num_agents / 4000)
                 reward_my.append(critic_train_info["average_step_rewards"])
-            np.save(file_folder + 'success_hist_7', success_hist_1_my)
-            np.save(file_folder + 'fail_collision_hist_7', fail_collision_hist_1_my)
-            np.save(file_folder + 'fail_PU_hist_7', fail_PU_hist_1_my)
-            np.save(file_folder + 'average_reward_7', reward_my)
+                np.save(file_folder + 'success_hist_7.npy', success_hist_1_my)
+                np.save(file_folder + 'fail_collision_hist_7.npy', fail_collision_hist_1_my)
+                np.save(file_folder + 'fail_PU_hist_7.npy', fail_PU_hist_1_my)
+                np.save(file_folder + 'fail_TDMA_hist_7.npy', fail_TDMA_hist_1_my)
+                np.save(file_folder + 'fail_ALOHA_hist_7.npy', fail_ALOHA_hist_1_my)
+                np.save(file_folder + 'average_reward_7.npy', reward_my)
 
             # eval
             if episode % self.algo_args["train"]["eval_interval"] == 0:
@@ -380,6 +392,8 @@ class OnPolicyBaseRunner:
             success_hist_1,
             fail_collision_hist_1,
             fail_PU_hist_1,
+            fail_TDMA_hist_1,
+            fail_ALOHA_hist_1,
         ) = data
 
         dones_env = np.all(dones, axis=1)  # if all agents are done, then env is done
@@ -483,12 +497,14 @@ class OnPolicyBaseRunner:
                 success_hist_1[:,0],
                 fail_collision_hist_1[:,0],
                 fail_PU_hist_1[:,0],
+                fail_TDMA_hist_1[:, 0],
+                fail_ALOHA_hist_1[:, 0],
                 masks[:, 0],
                 bad_masks,
             )
         elif self.state_type == "FP":
             self.critic_buffer.insert(
-                share_obs, rnn_states_critic, values, rewards,success_hist_1[:,0],fail_collision_hist_1[:,0],fail_PU_hist_1[:,0], masks, bad_masks
+                share_obs, rnn_states_critic, values, rewards,success_hist_1[:,0],fail_collision_hist_1[:,0],fail_PU_hist_1[:,0],fail_TDMA_hist_1[:,0], fail_ALOHA_hist_1[:,0],masks, bad_masks
             )
 
     @torch.no_grad()
@@ -577,6 +593,8 @@ class OnPolicyBaseRunner:
                 eval_success_hist_1,
                 eval_fail_collision_hist_1,
                 eval_fail_PU_hist_1,
+                eval_fail_TDMA_hist_1,
+                eval_fail_ALOHA_hist_1,
             ) = self.eval_envs.step(eval_actions)
             eval_data = (
                 eval_obs,
@@ -588,6 +606,8 @@ class OnPolicyBaseRunner:
                 eval_success_hist_1,
                 eval_fail_collision_hist_1,
                 eval_fail_PU_hist_1,
+                eval_fail_TDMA_hist_1,
+                eval_fail_ALOHA_hist_1,
             )
             self.logger.eval_per_step(
                 eval_data

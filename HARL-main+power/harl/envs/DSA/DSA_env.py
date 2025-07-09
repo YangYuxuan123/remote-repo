@@ -30,7 +30,7 @@ class DSA_Markov():
         self._has_updated = False
 
         self.sinr_history = [[] for _ in range(self.num_agents)]
-        self.file_folder = './myresult/hasac/'
+        self.file_folder = './myresult/mappo/'
 
         #初始化马尔可夫环境
         self._build_Markov_channel()

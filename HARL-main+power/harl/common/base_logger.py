@@ -60,6 +60,8 @@ class BaseLogger:
             success_hist_1,
             fail_collision_hist_1,
             fail_PU_hist_1,
+            fail_TDMA_hist_1,
+            fail_ALOHA_hist_1,
         ) = data
         dones_env = np.all(dones, axis=1)
         reward_env = np.mean(rewards, axis=1).flatten()
@@ -112,6 +114,10 @@ class BaseLogger:
         self.log_train(actor_train_infos, critic_train_info)
         critic_train_info["fail_PU_hist_1"] = np.sum(critic_buffer.fail_PU_hist_1_episode)
         self.log_train(actor_train_infos, critic_train_info)
+        critic_train_info["fail_TDMA_hist_1"] = np.sum(critic_buffer.fail_TDMA_hist_1_episode)
+        self.log_train(actor_train_infos, critic_train_info)
+        critic_train_info["fail_ALOHA_hist_1"] = np.sum(critic_buffer.fail_ALOHA_hist_1_episode)
+        self.log_train(actor_train_infos, critic_train_info)
         print(
             "Average step reward is {}.".format(
                 critic_train_info["average_step_rewards"]
@@ -132,6 +138,16 @@ class BaseLogger:
         print(
             "Average step fail_pu is {}.".format(
                 critic_train_info["fail_PU_hist_1"] / self.num_agents / 4000
+            )
+        )
+        print(
+            "Average step fail_tdma is {}.".format(
+                critic_train_info["fail_TDMA_hist_1"] / self.num_agents / 4000
+            )
+        )
+        print(
+            "Average step fail_aloha is {}.".format(
+                critic_train_info["fail_ALOHA_hist_1"] / self.num_agents / 4000
             )
         )
         #success_hist_1.append(critic_train_info["success_hist_1"]/self.num_agents/2000)
@@ -182,6 +198,8 @@ class BaseLogger:
             eval_success_hist_1,
             eval_fail_collision_hist_1,
             eval_fail_PU_hist_1,
+            eval_fail_TDMA_hist_1,
+            eval_fail_ALOHA_hist_1,
         ) = eval_data
         for eval_i in range(self.algo_args["eval"]["n_eval_rollout_threads"]):
             self.one_episode_rewards[eval_i].append(eval_rewards[eval_i])

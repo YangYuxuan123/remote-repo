@@ -68,6 +68,12 @@ class OnPolicyCriticBufferEP:
         self.fail_PU_hist_1_episode = np.zeros(
             (self.episode_length, self.n_rollout_threads, 1), dtype=np.float32
         )
+        self.fail_TDMA_hist_1_episode = np.zeros(
+            (self.episode_length, self.n_rollout_threads, 1), dtype=np.float32
+        )
+        self.fail_ALOHA_hist_1_episode = np.zeros(
+            (self.episode_length, self.n_rollout_threads, 1), dtype=np.float32
+        )
         # Buffer for masks indicating whether an episode is done at each timestep
         self.masks = np.ones(
             (self.episode_length + 1, self.n_rollout_threads, 1), dtype=np.float32
@@ -78,7 +84,7 @@ class OnPolicyCriticBufferEP:
 
         self.step = 0
     def insert(
-        self, share_obs, rnn_states_critic, value_preds, rewards,success_hist_1_episodes,fail_collision_hist_1_episodes,fail_PU_hist_1_episodes, masks, bad_masks
+        self, share_obs, rnn_states_critic, value_preds, rewards,success_hist_1_episodes,fail_collision_hist_1_episodes,fail_PU_hist_1_episodes,fail_TDMA_hist_1_episodes,fail_ALOHA_hist_1_episodes, masks, bad_masks
     ):
         # fail_collision_hist_1=[]
         # success_hist_1=[]
@@ -91,6 +97,8 @@ class OnPolicyCriticBufferEP:
         self.fail_collision_hist_1_episode[self.step] = fail_collision_hist_1_episodes.copy()
         self.success_hist_1_episode[self.step]=success_hist_1_episodes.copy()
         self.fail_PU_hist_1_episode[self.step]=fail_PU_hist_1_episodes.copy()
+        self.fail_TDMA_hist_1_episode[self.step] = fail_TDMA_hist_1_episodes.copy()
+        self.fail_ALOHA_hist_1_episode[self.step] = fail_ALOHA_hist_1_episodes.copy()
         self.masks[self.step + 1] = masks.copy()
         self.bad_masks[self.step + 1] = bad_masks.copy()
 

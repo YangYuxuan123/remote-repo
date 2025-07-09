@@ -13,21 +13,21 @@ device:
   torch_threads: 4
 train:
   # number of parallel environments for training data collection
-  n_rollout_threads: 10
+  n_rollout_threads: 20
   # number of total steps
-  num_env_steps: 500000
+  num_env_steps: 300000
   # number of warmup steps
   warmup_steps: 1000
   # number of steps per train
-  train_interval: 50
+  train_interval: 100
   # ratio of training iterations to train_interval
-  update_per_train: 1
+  update_per_train: 8
   # logging interval (currently unused)
   log_interval: ~
   # evaluation interval
-  eval_interval: 1000
+  eval_interval: 200
   # whether to use linear learning rate decay
-  use_linear_lr_decay: False
+  use_linear_lr_decay: True
   # whether to consider the case of truncation when an episode is done
   use_proper_time_limits: True
   # if set, load models from this directory; otherwise, randomly initialise the models
@@ -38,7 +38,7 @@ eval:
   # number of parallel environments for evaluation
   n_eval_rollout_threads: 20
   # number of episodes per evaluation
-  eval_episodes: 40
+  eval_episodes: 20
 render:
   # whether to use render
   use_render: False
@@ -49,23 +49,27 @@ model:
   # hidden sizes for mlp module in the network
   hidden_sizes: [128, 128]
   # activation function, choose from sigmoid, tanh, relu, leaky_relu, selu
-  activation_func: relu
+  activation_func: leaky_relu
   # final activation function, choose from sigmoid, tanh, relu, leaky_relu, selu
   final_activation_func: tanh
   # optimizer parameters
   # actor learning rate
-  lr: 0.0005
+  lr: 0.0003
   # critic learning rate
-  critic_lr: 0.001
+  critic_lr: 0.0003
 algo:
   # discount factor
-  gamma: 0.98
+  gamma: 0.97
   # off-policy buffer size
   buffer_size: 500000
+  # 目标熵更新的间隔
+  target_entropy_update_interval: 800  #800
+  # 更新目标熵时的滑动系数
+  entropy_update_eta: 0.005  #0.003   0.005
   # training batch size
-  batch_size: 1000
+  batch_size: 200
   # coefficient for target model soft update
-  polyak: 0.005
+  polyak: 0.001
   # exploration noise
   expl_noise: 0.1
   # the number of steps to look ahead

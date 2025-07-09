@@ -11,6 +11,7 @@ def get_combined_dim(cent_obs_feature_dim, act_spaces):
     """Get the combined dimension of central observation and individual actions."""
     combined_dim = cent_obs_feature_dim
     combined_dim = len(act_spaces) * 26 + combined_dim
+    #combined_dim = len(act_spaces) + combined_dim
     # for space in act_spaces:
     #     if space.__class__.__name__ == "Box":
     #         combined_dim += space.shape[0]
