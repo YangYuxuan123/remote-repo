@@ -99,3 +99,12 @@ algo:
 logger:
   # logging directory
   log_dir: "./results"
+env_weight_dir:
+  # actor parameter weight
+  actor_weight_dir: "./results/DSA/MultiDSA/hasac/installtest/seed-00001-2026-02-01-22-55-50/models/actor_agent"
+  # critic parameter weight
+  critic_weight_dir: "./results/DSA/MultiDSA/hasac/installtest/seed-00001-2026-02-01-22-55-50/models/critic_agent.pt"
+  # critic2 parameter weight
+  critic2_weight_dir: "./results/DSA/MultiDSA/hasac/installtest/seed-00001-2026-02-01-22-55-50/models/critic_agent2.pt"
+  # value normalizer
+  value_normalizer_dir: "./results/DSA/MultiDSA/hasac/installtest/seed-00001-2026-02-01-22-55-50/models/value_normalizer.pt"

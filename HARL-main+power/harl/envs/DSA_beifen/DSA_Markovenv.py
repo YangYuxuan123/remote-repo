@@ -15,9 +15,6 @@ logging.getLogger().setLevel(logging.ERROR)
 
 from harl.envs.DSA.DSA_env import DSA_Markov
 
-data_in = pd.read_csv("./real_data_trace.csv")
-data_in = data_in.drop("index",axis=1)
-
 class DSA_MarkovEnv:
     def __init__(self, args):
         random_seed=1

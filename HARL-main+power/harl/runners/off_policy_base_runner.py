@@ -135,12 +135,31 @@ class OffPolicyBaseRunner:
                     self.envs.action_space[agent_id],
                     device=self.device,
                 )
+                try:
+                    # 1. 从args获取路径前缀（配置文件里的weight_dir）
+                    actor_weight_prefix = self.algo_args["env_weight_dir"]["actor_weight_dir"]
+                    # 2. 拼接agent_id和后缀，生成完整路径（关键！动态替换agent_id）
+                    weight_path = f"{actor_weight_prefix}{agent_id}.pt"
+                    # 3. 加载权重（建议加os.path.exists检查，更易排错）
+                    if not os.path.exists(weight_path):
+                        raise FileNotFoundError(f"文件不存在：{weight_path}")
+                    agent.actor.load_state_dict(
+                        torch.load(weight_path, map_location=self.device)
+                    )
+                    print(f"✅ 成功加载agent{agent_id}的A环境actor权重：{weight_path}")
+                except FileNotFoundError as e:
+                    print(f"⚠️ agent{agent_id}加载权重失败：{e}，使用随机初始权重")
+                except RuntimeError as e:
+                    print(f"❌ agent{agent_id}加载权重失败：{e}")
+                    print(f"请检查agent{agent_id}的obs_space/act_space是否和A环境一致")
+
+                # 2. 将加载完权重的agent加入列表
                 self.actor.append(agent)
 
         if not self.algo_args["render"]["use_render"]:
             #print(self.envs.share_observation_space,"test3")
             self.critic = CRITIC_REGISTRY[args["algo"]](
-                {**algo_args["train"], **algo_args["model"], **algo_args["algo"]},
+                {**algo_args["train"], **algo_args["model"], **algo_args["algo"], **algo_args["env_weight_dir"]},
                 self.envs.share_observation_space[0],
                 self.envs.action_space,
                 self.num_agents,
@@ -172,6 +191,31 @@ class OffPolicyBaseRunner:
             and self.algo_args["train"]["use_valuenorm"]
         ):
             self.value_normalizer = ValueNorm(1, device=self.device)
+            # ========== 新增：加载A环境的ValueNorm权重 ==========
+            try:
+                # 从args读取归一化器权重路径（配置文件里配置）
+                normalizer_weight_path = self.algo_args["env_weight_dir"]["value_normalizer_dir"]
+                if not os.path.exists(normalizer_weight_path):
+                    raise FileNotFoundError(f"归一化器权重文件不存在：{normalizer_weight_path}")
+
+                # 加载A环境保存的ValueNorm权重（注意：是加载state_dict，不是整个模型）
+                normalizer_weights = torch.load(normalizer_weight_path, map_location=self.device)
+                self.value_normalizer.load_state_dict(normalizer_weights)
+
+                # 关键：冻结归一化器的更新（可选，根据需求）
+                # 若希望B环境复用A的统计数据，禁用update；若希望适配B环境，保留update
+                # self.value_normalizer.update = lambda x: None  # 禁用更新（推荐先试这个）
+
+                print(f"✅ 成功加载A环境ValueNorm权重：{normalizer_weight_path}")
+                # 打印均值验证（加载后应该不是0）
+                mean, var = self.value_normalizer.running_mean_var()
+                print(f"📊 ValueNorm加载后均值：{mean.item():.6f}，方差：{var.item():.6f}")
+            except FileNotFoundError as e:
+                print(f"⚠️ 未找到ValueNorm权重文件：{e}，使用空归一化器（性能会下降）")
+            except RuntimeError as e:
+                print(f"❌ 加载ValueNorm权重失败：{e}")
+                print("请检查A/B环境的ValueNorm输入维度是否一致（input_shape=1）")
+
         else:
             self.value_normalizer = None
 
@@ -298,10 +342,7 @@ class OffPolicyBaseRunner:
             ) = self.envs.step(
                 actions
             )
-            # print(new_share_obs[0][0])
-            # print(fail_PU_hist_1s)
-            # rewards: (n_threads, n_agents, 1); dones: (n_threads, n_agents)
-            # available_actions: (n_threads, ) of None or (n_threads, n_agents, action_number)
+
             next_obs = new_obs.copy()
             next_share_obs = new_share_obs.copy()
             next_available_actions = new_available_actions.copy()

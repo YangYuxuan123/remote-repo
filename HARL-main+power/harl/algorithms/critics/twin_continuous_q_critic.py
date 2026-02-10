@@ -2,6 +2,7 @@
 import itertools
 from copy import deepcopy
 import torch
+import os
 from harl.models.value_function_models.continuous_q_net import ContinuousQNet
 from harl.utils.envs_tools import check
 from harl.utils.models_tools import update_linear_schedule
@@ -34,8 +35,41 @@ class TwinContinuousQCritic:
         #self.action_type = act_space['agent_0'].__class__.__name__
         self.critic = ContinuousQNet(args, share_obs_space, act_space, device)
         self.critic2 = ContinuousQNet(args, share_obs_space, act_space, device)
+
+        # ========== 新增代码：加载A环境的双Critic权重（参数化路径版） ==========
+        try:
+            # 1. 从args读取Critic的完整权重路径（配置文件里的完整路径）
+            critic_weight_path = args["critic_weight_dir"]
+            # 检查文件是否存在（提前排错）
+            if not os.path.exists(critic_weight_path):
+                raise FileNotFoundError(f"Critic权重文件不存在：{critic_weight_path}")
+            # 加载Critic权重
+            critic_weights = torch.load(critic_weight_path, map_location=device)
+            self.critic.load_state_dict(critic_weights)
+
+            # 2. 从args读取Critic2的完整权重路径（同样参数化，避免硬编码）
+            critic2_weight_path = args["critic2_weight_dir"]
+            if not os.path.exists(critic2_weight_path):
+                raise FileNotFoundError(f"Critic2权重文件不存在：{critic2_weight_path}")
+            # 加载Critic2权重
+            critic2_weights = torch.load(critic2_weight_path, map_location=device)
+            self.critic2.load_state_dict(critic2_weights)
+
+            print(f"✅ 成功加载A环境双Critic权重到B环境！")
+            print(f"  - Critic1路径：{critic_weight_path}")
+            print(f"  - Critic2路径：{critic2_weight_path}")
+            print(f"  - 设备：{device}")
+        except FileNotFoundError as e:
+            print(f"⚠️ 未找到A环境Critic权重文件：{e}，使用随机初始权重训练B环境")
+        except RuntimeError as e:
+            print(f"❌ 加载Critic权重失败：{e}")
+            print("请检查A/B环境的share_obs_space/act_space是否一致")
+
+        # ========== 原代码：深拷贝得到两个目标Critic网络 + 冻结梯度 ==========
+        # 注意：此时target_critic/target_critic2会拷贝加载后的权重（而非随机权重）
         self.target_critic = deepcopy(self.critic)
         self.target_critic2 = deepcopy(self.critic2)
+
         for param in self.target_critic.parameters():
             param.requires_grad = False
         for param in self.target_critic2.parameters():
