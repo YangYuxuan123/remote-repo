@@ -297,6 +297,19 @@ class OffPolicyBaseRunner:
         print("start warmup")
         obs, share_obs, available_actions = self.warmup()
         print("finish warmup, start training")
+
+        # ============ 在这里添加！在训练循环之前 ============
+        # 新增：如果配置了纯评估模式
+        if self.algo_args["eval"].get("force_eval_once", False):
+            print("执行纯评估模式，跳过训练...")
+            cur_step = self.algo_args["train"]["warmup_steps"]
+            # 可以评估多次
+            eval_episodes = self.algo_args["eval"].get("eval_episodes", 1)
+            for episode in range(eval_episodes):
+                print(f"\n=== 评估回合 {episode + 1}/{eval_episodes} ===")
+                self.eval(cur_step + episode * 1000)  # 假设每个episode1000步
+            return  # 直接返回，不执行后面的训练循环
+
         # train and eval
         ###
         steps = (
@@ -906,8 +919,8 @@ class OffPolicyBaseRunner:
                     print(
                         f"Eval average episode reward is {eval_avg_rew}, eval average episode length is {eval_avg_len}.\n"
                     )
-                    '''
-                    print(
+
+                    '''print(
                         f"Eval average episode success rate is {eval_avg_success/3/5}, eval average episode length is {eval_avg_len}."
                     )
                     print(
@@ -915,8 +928,8 @@ class OffPolicyBaseRunner:
                     )
                     print(
                         f"Eval average episode failsu rate is {eval_avg_failsu/3/5}, eval average episode length is {eval_avg_len}.\n"
-                    )
-                    '''
+                    )'''
+
                 self.rewardmy.append(eval_avg_rew)
                     # fail_collisionmy.append(eval_avg_failsu/3/5)
                     # success_histmy.append(eval_avg_success/3/5)

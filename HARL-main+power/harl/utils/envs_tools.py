@@ -13,6 +13,7 @@ def check(value):
 
 ##change
 def get_shape_from_obs_space(obs_space):
+
     # print("***************************")
     # print(obs_space)
     """Get shape from observation space.

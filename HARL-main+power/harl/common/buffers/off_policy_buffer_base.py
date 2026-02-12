@@ -112,6 +112,7 @@ class OffPolicyBufferBase:
             next_obs: [(n_rollout_threads, *obs_shapes[agent_id]) for agent_id in range(num_agents)]
             next_available_actions: [(n_rollout_threads, *act_shapes[agent_id]) for agent_id in range(num_agents)]
         """
+
         (
             share_obs,
             obs,
@@ -130,18 +131,11 @@ class OffPolicyBufferBase:
             fail_TDMA_hist_1,
             fail_ALOHA_hist_1,
         ) = data
-        #length = share_obs.shape[0]
-        # length=len(share_obs)#+1
         length = share_obs.shape[0]
-        # print(length, "sa")
-        #print(share_obs, obs, actions, "test")
-        # print(share_obs,len(share_obs))
-        # print(length)
+
         if self.idx + length <= self.buffer_size:  # no overflow
             s = self.idx
             e = self.idx + length
-            #print(reward)
-            #print(success_hist_1)
             self.share_obs[s:e] = share_obs.copy()
             self.rewards[s:e] = reward.copy()
             success_hist_1 = [item[0] for item in success_hist_1]
@@ -165,13 +159,6 @@ class OffPolicyBufferBase:
                 self.valid_transitions[agent_id][s:e] = valid_transitions[
                     agent_id
                 ].copy()
-
-                # self.available_actions[agent_id][s:e] = available_actions[
-                #     agent_id
-                # ].copy()
-                # self.next_available_actions[agent_id][s:e] = next_available_actions[
-                #     agent_id
-                # ].copy()
                 if self.act_spaces[agent_id].__class__.__name__ == "Discrete":
                     self.available_actions[agent_id][s:e] = available_actions[
                         agent_id
@@ -238,7 +225,6 @@ class OffPolicyBufferBase:
                 self.next_obs[agent_id][s:e] = next_obs[agent_id][len1:length].copy()
 
         self.idx = (self.idx + length) % self.buffer_size  # update index
-        #print(self.buffer_size,"buffer_size")
         self.cur_size = min(
             self.cur_size + length, self.buffer_size
         )  # update current size
@@ -255,19 +241,23 @@ class OffPolicyBufferBase:
     def get_mean_rewards(self):
         """Get mean rewards of the buffer"""
         return np.mean(self.rewards[: self.cur_size])
+
     def get_mean_success(self):
-        """Get mean rewards of the buffer"""
-        # print(np.sum(self.success_hist_1s[: self.cur_size]))
-        return np.sum(self.success_hist_1s[: self.cur_size])/self.cur_size/self.num_agents
+        """Get mean success rate of channel occupation"""
+        return np.sum(self.success_hist_1s[: self.cur_size]) / self.cur_size / self.num_agents
+
     def get_mean_fail_collision_hist_1s(self):
-        """Get mean rewards of the buffer"""
-        return np.sum(self.fail_collision_hist_1s[: self.cur_size])/self.cur_size/self.num_agents
+        """Get mean collision failure rate"""
+        return np.sum(self.fail_collision_hist_1s[: self.cur_size]) / self.cur_size / self.num_agents
+
     def get_mean_fail_PU_hist_1s(self):
-        """Get mean rewards of the buffer"""
-        return np.sum(self.fail_PU_hist_1s[: self.cur_size])/self.cur_size/self.num_agents
+        """Get mean PU occupation failure rate"""
+        return np.sum(self.fail_PU_hist_1s[: self.cur_size]) / self.cur_size / self.num_agents
+
     def get_mean_fail_TDMA_hist_1s(self):
-        """Get mean rewards of the buffer"""
-        return np.sum(self.fail_TDMA_hist_1s[: self.cur_size])/self.cur_size/self.num_agents
+        """Get mean TDMA failure rate"""
+        return np.sum(self.fail_TDMA_hist_1s[: self.cur_size]) / self.cur_size / self.num_agents
+
     def get_mean_fail_ALOHA_hist_1s(self):
-        """Get mean rewards of the buffer"""
-        return np.sum(self.fail_ALOHA_hist_1s[: self.cur_size])/self.cur_size/self.num_agents
+        """Get mean ALOHA failure rate"""
+        return np.sum(self.fail_ALOHA_hist_1s[: self.cur_size]) / self.cur_size / self.num_agents
