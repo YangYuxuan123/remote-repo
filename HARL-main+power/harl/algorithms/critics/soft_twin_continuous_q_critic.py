@@ -76,6 +76,8 @@ class SoftTwinContinuousQCritic(TwinContinuousQCritic):
         next_actions,
         next_logp_actions,
         gamma,
+        is_weights,  # ⭐ 加上
+        indice,  # ⭐ 加上
         value_normalizer=None,
     ):
         """Train the critic.
@@ -99,6 +101,8 @@ class SoftTwinContinuousQCritic(TwinContinuousQCritic):
         assert term.__class__.__name__ == "ndarray"
         assert next_share_obs.__class__.__name__ == "ndarray"
         assert gamma.__class__.__name__ == "ndarray"
+        assert is_weights.__class__.__name__ == "ndarray"
+        assert indice.__class__.__name__ == "ndarray"
 
         share_obs = check(share_obs).to(**self.tpdv)
 
@@ -198,20 +202,52 @@ class SoftTwinContinuousQCritic(TwinContinuousQCritic):
                     / valid_transition.sum()
                 )
             else:
-                critic_loss1 = torch.mean(
-                    F.huber_loss(
-                        self.critic(share_obs, actions),
-                        q_targets,
-                        delta=self.huber_delta,
-                    )
-                )
-                critic_loss2 = torch.mean(
-                    F.huber_loss(
-                        self.critic2(share_obs, actions),
-                        q_targets,
-                        delta=self.huber_delta,
-                    )
-                )
+                # 计算当前Q
+                current_q1 = self.critic(share_obs, actions)
+                current_q2 = self.critic2(share_obs, actions)
+
+                # TD error
+                td_error1 = current_q1 - q_targets
+                td_error2 = current_q2 - q_targets
+
+                # ===== 关键修复：numpy -> torch，并对齐device/dtype/shape =====
+                if isinstance(is_weights, np.ndarray):
+                    is_weights = torch.from_numpy(is_weights).to(device=share_obs.device, dtype=share_obs.dtype)
+                else:
+                    is_weights = is_weights.to(device=share_obs.device, dtype=share_obs.dtype)
+
+                if is_weights.dim() == 1:
+                    is_weights = is_weights.unsqueeze(-1)  # (batch_size,) -> (batch_size, 1)
+
+                # ⭐ PER: importance sampling 修正（必须 reduction="none"）
+                critic_loss1 = (is_weights * F.huber_loss(
+                    current_q1,
+                    q_targets,
+                    delta=self.huber_delta,
+                    reduction="none"
+                )).mean()
+
+                critic_loss2 = (is_weights * F.huber_loss(
+                    current_q2,
+                    q_targets,
+                    delta=self.huber_delta,
+                    reduction="none"
+                )).mean()
+
+                # critic_loss1 = torch.mean(
+                #     F.huber_loss(
+                #         self.critic(share_obs, actions),
+                #         q_targets,
+                #         delta=self.huber_delta,
+                #     )
+                # )
+                # critic_loss2 = torch.mean(
+                #     F.huber_loss(
+                #         self.critic2(share_obs, actions),
+                #         q_targets,
+                #         delta=self.huber_delta,
+                #     )
+                # )
         else:
             if self.state_type == "FP" and self.use_policy_active_masks:
                 critic_loss1 = (
@@ -239,3 +275,13 @@ class SoftTwinContinuousQCritic(TwinContinuousQCritic):
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
         self.critic_optimizer.step()
+
+        # ================== PER: 计算并返回 new_priority（给 runner 回写到 buffer） ==================
+        with torch.no_grad():
+            # td_error1/td_error2 是你在 EP 分支里刚刚算的
+            td_err = 0.5 * (td_error1.abs() + td_error2.abs())  # (batch_size, 1)
+
+            # 数值稳定：避免 0
+            new_priority = (td_err + 1e-6).detach().cpu().numpy().reshape(-1)
+
+        return new_priority

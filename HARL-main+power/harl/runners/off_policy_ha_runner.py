@@ -25,6 +25,8 @@ class OffPolicyHARunner(OffPolicyBaseRunner):
             sp_next_obs,  # (n_agents, batch_size, dim)
             sp_next_available_actions,  # (n_agents, batch_size, dim)
             sp_gamma,  # EP: (batch_size, 1), FP: (n_agents * batch_size, 1)
+            is_weights,  # ⭐ 新增
+            indice  # ⭐ 新增
         ) = data
         # train critic
         self.critic.turn_on_grad()
@@ -54,7 +56,7 @@ class OffPolicyHARunner(OffPolicyBaseRunner):
                 # next_logp_actions,下一个时间步每个智能体动作的对数概率，是一个列表每个元素对应一个智能体在下一个观察状态下的动作对数概率
                 # sp_gamma,每个智能体折扣因子，是一个列表其中每个元素对应一个智能体折扣因子
                 # self.value_normalizer,值归一化器，用于归一化预测值的工具，帮助稳定训练过程
-            self.critic.train(
+            new_priority = self.critic.train(
                 sp_share_obs,
                 sp_actions,
                 sp_reward,
@@ -65,8 +67,39 @@ class OffPolicyHARunner(OffPolicyBaseRunner):
                 next_actions,
                 next_logp_actions,
                 sp_gamma,
+                is_weights,  # ⭐ 加上
+                indice,  # ⭐ 加上
                 self.value_normalizer,
             )
+
+            # ================== PER: 回写 priorities（闭环更新，支持重复索引） ==================
+            if new_priority is not None:
+                idx_all = indice.reshape(-1).astype(np.int64)
+                pri_all = new_priority.reshape(-1).astype(np.float32)
+
+                # 保险：只更新 cur_size 范围内
+                mask = idx_all < self.buffer.cur_size
+                idx_all, pri_all = idx_all[mask], pri_all[mask]
+
+                # 数值稳定：避免 0 / 极端值（可按需调整上限）
+                pri_all = np.clip(pri_all, 1e-6, 10.0)
+
+                # 处理重复 idx：取最大 priority（PER 常用做法）
+                np.maximum.at(self.buffer.priorities, idx_all, pri_all)
+
+                # # ===== Debug: 检查 priority 是否变化 =====
+                # if self.total_it % 10000 == 0:  # 每100步打印一次
+                #     print("=== PER DEBUG ===")
+                #     print("priority mean:", self.buffer.priorities[:self.buffer.cur_size].mean())
+                #     print("priority std :", self.buffer.priorities[:self.buffer.cur_size].std())
+                #     print("priority max :", self.buffer.priorities[:self.buffer.cur_size].max())
+
+                # 可选：beta anneal（让 IS 修正逐渐变强）
+                self.buffer.beta = min(1.0, self.buffer.beta + 1e-4)
+
+                # if self.total_it % 10000 == 0:
+                #     print("beta:", self.buffer.beta)
+
         else:
             next_actions = []
             for agent_id in range(self.num_agents):
